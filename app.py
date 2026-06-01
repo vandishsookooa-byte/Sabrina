@@ -1,6 +1,6 @@
 import json
 import os
-from datetime import datetime
+from datetime import UTC, datetime
 from typing import Dict, Iterable, List
 
 import numpy as np
@@ -578,7 +578,7 @@ def build_payload(df: pd.DataFrame, args) -> Dict[str, object]:
         "monthly_department": monthly,
         "filters": filter_values(df),
         "selected": selected_filters(args),
-        "generated_at": datetime.utcnow().strftime("%Y-%m-%d %H:%M UTC"),
+        "generated_at": datetime.now(UTC).strftime("%Y-%m-%d %H:%M UTC"),
     }
 
 

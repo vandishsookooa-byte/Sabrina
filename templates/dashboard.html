@@ -203,7 +203,7 @@
           {% for r in matrix.rows %}
             <tr>
               <td>{{ r.department }}</td>
-              {% for v in r.values %}
+              {% for v in r['values'] %}
                 {% if heat %}
                   <td><div class="heat" data-val="{{ v }}">{{ '%.2f'|format(v) }}</div></td>
                 {% else %}
