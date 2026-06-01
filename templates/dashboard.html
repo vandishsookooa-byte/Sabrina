@@ -1,0 +1,309 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Attendance Executive Dashboard</title>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+  <style>
+    :root { --bg:#0b1220; --panel:#111a2e; --card:#15213a; --text:#e5e7eb; --muted:#9ca3af; --accent:#60a5fa; }
+    body { background: var(--bg); color: var(--text); }
+    .panel { background: var(--panel); border: 1px solid #1f2a44; border-radius: 12px; }
+    .metric { background: var(--card); border:1px solid #243454; border-radius:12px; }
+    .metric .label { font-size:.75rem; color: var(--muted); text-transform:uppercase; }
+    .metric .value { font-size:1.5rem; font-weight:700; }
+    .traffic { width:10px; height:10px; border-radius:50%; display:inline-block; margin-right:6px; }
+    .traffic.green { background:#22c55e; } .traffic.yellow { background:#f59e0b; } .traffic.red { background:#ef4444; }
+    .table { --bs-table-bg: transparent; --bs-table-color: var(--text); --bs-table-striped-color: var(--text); --bs-table-striped-bg: rgba(255,255,255,0.03); }
+    .table thead th { color:#cbd5e1; font-size:.8rem; text-transform:uppercase; }
+    .section-title { color:#dbeafe; font-weight:700; font-size:1rem; }
+    .small-note { color:var(--muted); font-size:.8rem; }
+    .heat { text-align:center; border-radius:6px; color:#0b1220; font-weight:700; }
+    .form-select, .form-control { background:#0f172a; color:#e5e7eb; border-color:#334155; }
+    .form-select:focus, .form-control:focus { background:#0f172a; color:#e5e7eb; }
+  </style>
+</head>
+<body>
+<div class="container-fluid p-4">
+  <div class="d-flex justify-content-between align-items-center mb-3">
+    <div>
+      <h3 class="mb-0">Attendance Executive Summary</h3>
+      <div class="small-note">Professional management reporting dashboard</div>
+    </div>
+    <div class="d-flex gap-2">
+      <a href="/drilldown?{{ request.query_string.decode() }}" class="btn btn-outline-light btn-sm">Attendance Analytics Page</a>
+    </div>
+  </div>
+
+  {% if error %}
+    <div class="alert alert-danger">{{ error }}</div>
+  {% endif %}
+
+  {% if payload %}
+  <div class="panel p-3 mb-3">
+    <form method="get" class="row g-2">
+      <div class="col-md-2">
+        <label class="form-label small-note">Department</label>
+        <select name="department" class="form-select" multiple size="5">
+          {% for v in payload.filters.departments %}
+            <option value="{{ v }}" {% if v in payload.selected.department %}selected{% endif %}>{{ v }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div class="col-md-2">
+        <label class="form-label small-note">Employee (ID Card)</label>
+        <select name="id_card" class="form-select" multiple size="5">
+          {% for v in payload.filters.id_cards %}
+            <option value="{{ v }}" {% if v in payload.selected.id_card %}selected{% endif %}>{{ v }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div class="col-md-2">
+        <label class="form-label small-note">Leave Type</label>
+        <select name="leave_type" class="form-select" multiple size="5">
+          {% for v in payload.filters.leave_types %}
+            <option value="{{ v }}" {% if v in payload.selected.leave_type %}selected{% endif %}>{{ v }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div class="col-md-1">
+        <label class="form-label small-note">Month</label>
+        <select name="month" class="form-select" multiple size="5">
+          {% for v in payload.filters.months %}
+            <option value="{{ v }}" {% if v in payload.selected.month %}selected{% endif %}>{{ v }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div class="col-md-1">
+        <label class="form-label small-note">Year</label>
+        <select name="year" class="form-select" multiple size="5">
+          {% for v in payload.filters.years %}
+            <option value="{{ v }}" {% if v in payload.selected.year %}selected{% endif %}>{{ v }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div class="col-md-2">
+        <label class="form-label small-note">Start Date</label>
+        <input type="date" name="start_date" class="form-control" value="{{ payload.selected.start_date }}">
+        <label class="form-label small-note mt-2">End Date</label>
+        <input type="date" name="end_date" class="form-control" value="{{ payload.selected.end_date }}">
+      </div>
+      <div class="col-md-2 d-flex align-items-end gap-2">
+        <button class="btn btn-primary w-100" type="submit">Apply</button>
+        <a href="/" class="btn btn-outline-light w-100">Reset</a>
+      </div>
+    </form>
+  </div>
+
+  <div class="row g-3 mb-3">
+    {% for key, title in [('attendance_pct','Attendance %'),('absenteeism_pct','Absenteeism %'),('ot_pct','OT %'),('leave_pct','Leave %'),('missing_hours_pct','Missing Hours %')] %}
+      <div class="col-md-2">
+        <div class="metric p-3 h-100">
+          <div class="label">{{ title }}</div>
+          <div class="value"><span class="traffic {{ payload.summary_cards.traffic[key] }}"></span>{{ payload.summary_cards[key] }}</div>
+        </div>
+      </div>
+    {% endfor %}
+    <div class="col-md-2">
+      <div class="metric p-3 h-100">
+        <div class="label">Total Headcount</div>
+        <div class="value">{{ payload.summary_cards.total_headcount }}</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="row g-3 mb-3">
+    <div class="col-md-8"><div class="panel p-3"><div class="section-title">Department Comparison (Bar)</div><canvas id="deptKpiChart"></canvas></div></div>
+    <div class="col-md-4">
+      <div class="panel p-3 mb-3">
+        <div class="section-title">Executive Observations</div>
+        <ul class="small-note mb-0">
+          <li>Best Performing Department: <strong>{{ payload.kpi.best_department }}</strong></li>
+          <li>Department Requiring Attention: <strong>{{ payload.kpi.attention_department }}</strong></li>
+          {% for i in payload.insights %}<li>{{ i }}</li>{% endfor %}
+        </ul>
+      </div>
+      <div class="panel p-3">
+        <div class="section-title">Absenteeism vs Overtime Correlation</div>
+        <div class="table-responsive">
+          <table class="table table-sm table-striped mb-0">
+            <thead><tr><th>Department</th><th>Absenteeism %</th><th>OT %</th><th>Corr</th></tr></thead>
+            <tbody>
+            {% for r in payload.correlation.to_dict(orient='records') %}
+              <tr><td>{{ r.department }}</td><td>{{ '%.2f'|format(r.avg_absenteeism_pct) }}</td><td>{{ '%.2f'|format(r.avg_ot_pct) }}</td><td>{{ '%.3f'|format(r.correlation) }}</td></tr>
+            {% endfor %}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="row g-3 mb-3">
+    <div class="col-md-6"><div class="panel p-3"><div class="section-title">Monthly Attendance Trend (Line)</div><canvas id="attendanceTrendChart"></canvas></div></div>
+    <div class="col-md-6"><div class="panel p-3"><div class="section-title">Monthly Absenteeism Trend (Line)</div><canvas id="absenteeismTrendChart"></canvas></div></div>
+    <div class="col-md-6"><div class="panel p-3"><div class="section-title">Monthly Overtime Trend (Line)</div><canvas id="otTrendChart"></canvas></div></div>
+    <div class="col-md-6"><div class="panel p-3"><div class="section-title">Monthly Headcount Trend</div><canvas id="headcountTrendChart"></canvas></div></div>
+  </div>
+
+  <div class="panel p-3 mb-3">
+    <div class="section-title">Monthly Summary</div>
+    <div class="table-responsive">
+      <table class="table table-sm table-striped mb-0">
+        <thead><tr><th>Month</th><th>Attendance %</th><th>Leave %</th><th>OT %</th><th>Missing Hours %</th><th>Total Employees</th></tr></thead>
+        <tbody>
+        {% for r in payload.monthly_summary.to_dict(orient='records') %}
+          <tr><td>{{ r.month }}</td><td>{{ '%.2f'|format(r.attendance_pct) }}</td><td>{{ '%.2f'|format(r.leave_pct) }}</td><td>{{ '%.2f'|format(r.ot_pct) }}</td><td>{{ '%.2f'|format(r.missing_hours_pct) }}</td><td>{{ r.total_employees }}</td></tr>
+        {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <div class="panel p-3 mb-3">
+    <div class="section-title">Department Performance Scorecard</div>
+    <div class="table-responsive">
+      <table class="table table-sm table-striped mb-0">
+        <thead><tr><th>Department</th><th>Attendance %</th><th>Absenteeism %</th><th>Leave %</th><th>OT %</th><th>Missing Hours %</th><th>Overall Rank</th></tr></thead>
+        <tbody>
+        {% for r in payload.department_scorecard.to_dict(orient='records') %}
+          <tr><td>{{ r.department }}</td><td>{{ '%.2f'|format(r.attendance_pct) }}</td><td>{{ '%.2f'|format(r.absenteeism_pct) }}</td><td>{{ '%.2f'|format(r.leave_pct) }}</td><td>{{ '%.2f'|format(r.ot_pct) }}</td><td>{{ '%.2f'|format(r.missing_hours_pct) }}</td><td>{{ r.overall_rank }}</td></tr>
+        {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <div class="row g-3 mb-3">
+    <div class="col-md-3"><div class="panel p-3"><div class="section-title">Top 5 Attendance</div><ul class="small-note mb-0">{% for r in payload.top_departments.attendance.to_dict(orient='records') %}<li>{{ r.department }} - {{ '%.2f'|format(r.attendance_pct) }}%</li>{% endfor %}</ul></div></div>
+    <div class="col-md-3"><div class="panel p-3"><div class="section-title">Top 5 Absenteeism</div><ul class="small-note mb-0">{% for r in payload.top_departments.absenteeism.to_dict(orient='records') %}<li>{{ r.department }} - {{ '%.2f'|format(r.absenteeism_pct) }}%</li>{% endfor %}</ul></div></div>
+    <div class="col-md-3"><div class="panel p-3"><div class="section-title">Top 5 Overtime</div><ul class="small-note mb-0">{% for r in payload.top_departments.overtime.to_dict(orient='records') %}<li>{{ r.department }} - {{ '%.2f'|format(r.ot_pct) }}%</li>{% endfor %}</ul></div></div>
+    <div class="col-md-3"><div class="panel p-3"><div class="section-title">Top 5 Missing Hours</div><ul class="small-note mb-0">{% for r in payload.top_departments.missing.to_dict(orient='records') %}<li>{{ r.department }} - {{ '%.2f'|format(r.missing_hours_pct) }}%</li>{% endfor %}</ul></div></div>
+  </div>
+
+  <div class="row g-3 mb-3">
+    <div class="col-md-4"><div class="panel p-3"><div class="section-title">Top 10 ID Cards - Overtime</div><div class="table-responsive"><table class="table table-sm table-striped mb-0"><thead><tr><th>ID Card</th><th>Dept</th><th>Hours</th></tr></thead><tbody>{% for r in payload.top_employees.ot.to_dict(orient='records') %}<tr><td>{{ r.id_card }}</td><td>{{ r.department }}</td><td>{{ '%.2f'|format(r.overtime_hours) }}</td></tr>{% endfor %}</tbody></table></div></div></div>
+    <div class="col-md-4"><div class="panel p-3"><div class="section-title">Top 10 ID Cards - Missing Hours</div><div class="table-responsive"><table class="table table-sm table-striped mb-0"><thead><tr><th>ID Card</th><th>Dept</th><th>Hours</th></tr></thead><tbody>{% for r in payload.top_employees.missing.to_dict(orient='records') %}<tr><td>{{ r.id_card }}</td><td>{{ r.department }}</td><td>{{ '%.2f'|format(r.missing_hours) }}</td></tr>{% endfor %}</tbody></table></div></div></div>
+    <div class="col-md-4"><div class="panel p-3"><div class="section-title">Top 10 ID Cards - Absenteeism</div><div class="table-responsive"><table class="table table-sm table-striped mb-0"><thead><tr><th>ID Card</th><th>Dept</th><th>Days</th></tr></thead><tbody>{% for r in payload.top_employees.absenteeism.to_dict(orient='records') %}<tr><td>{{ r.id_card }}</td><td>{{ r.department }}</td><td>{{ r.absenteeism_days }}</td></tr>{% endfor %}</tbody></table></div></div></div>
+  </div>
+
+  <div class="row g-3 mb-3">
+    <div class="col-md-6"><div class="panel p-3"><div class="section-title">OT1/OT2/OT3 Trend by Department</div><canvas id="ot1TrendChart"></canvas><canvas id="ot2TrendChart" class="mt-3"></canvas><canvas id="ot3TrendChart" class="mt-3"></canvas></div></div>
+    <div class="col-md-6"><div class="panel p-3"><div class="section-title">OT Monthly Summary by Department</div><div class="table-responsive"><table class="table table-sm table-striped mb-0"><thead><tr><th>Department</th><th>OT1 %</th><th>OT2 %</th><th>OT3 %</th><th>Total OT %</th></tr></thead><tbody>{% for r in payload.ot_table.to_dict(orient='records') %}<tr><td>{{ r.department }}</td><td>{{ '%.2f'|format(r.ot1_pct) }}</td><td>{{ '%.2f'|format(r.ot2_pct) }}</td><td>{{ '%.2f'|format(r.ot3_pct) }}</td><td>{{ '%.2f'|format(r.total_ot_pct) }}</td></tr>{% endfor %}</tbody></table></div><hr><ul class="small-note mb-0"><li>Top OT1: {% for r in payload.top_departments.ot1.to_dict(orient='records') %}{{ r.department }}{% if not loop.last %}, {% endif %}{% endfor %}</li><li>Top OT2: {% for r in payload.top_departments.ot2.to_dict(orient='records') %}{{ r.department }}{% if not loop.last %}, {% endif %}{% endfor %}</li><li>Top OT3: {% for r in payload.top_departments.ot3.to_dict(orient='records') %}{{ r.department }}{% if not loop.last %}, {% endif %}{% endfor %}</li></ul></div></div>
+  </div>
+
+  {% macro matrix_table(title, matrix, heat=false) -%}
+  <div class="panel p-3 mb-3">
+    <div class="section-title">{{ title }}</div>
+    <div class="table-responsive">
+      <table class="table table-sm table-striped mb-0">
+        <thead><tr><th>Department</th>{% for m in matrix.months %}<th>{{ m }}</th>{% endfor %}</tr></thead>
+        <tbody>
+          {% for r in matrix.rows %}
+            <tr>
+              <td>{{ r.department }}</td>
+              {% for v in r.values %}
+                {% if heat %}
+                  <td><div class="heat" data-val="{{ v }}">{{ '%.2f'|format(v) }}</div></td>
+                {% else %}
+                  <td>{{ '%.2f'|format(v) }}</td>
+                {% endif %}
+              {% endfor %}
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+  {%- endmacro %}
+
+  {{ matrix_table('Department Matrix View (OT %)', payload.matrices.ot) }}
+  {{ matrix_table('Heat Map - Attendance %', payload.matrices.attendance, true) }}
+  {{ matrix_table('Heat Map - Absenteeism %', payload.matrices.absenteeism, true) }}
+  {{ matrix_table('Heat Map - Missing Hours %', payload.matrices.missing, true) }}
+  {{ matrix_table('Heat Map - Overtime %', payload.matrices.overtime, true) }}
+
+  <div class="row g-3 mb-3">
+    <div class="col-md-6"><div class="panel p-3"><div class="section-title">Exception Report</div><div class="small-note">Employees with No Leave Taken</div><ul class="small-note">{% for r in payload.exceptions.no_leave.to_dict(orient='records') %}<li>{{ r.id_card }} ({{ r.department }})</li>{% endfor %}</ul><div class="small-note">Employees with Excessive Overtime</div><ul class="small-note">{% for r in payload.exceptions.excessive_ot.to_dict(orient='records') %}<li>{{ r.id_card }} - {{ '%.2f'|format(r.overtime_hours) }}</li>{% endfor %}</ul></div></div>
+    <div class="col-md-6"><div class="panel p-3"><div class="section-title">Exception Report</div><div class="small-note">Employees with Excessive Missing Hours</div><ul class="small-note">{% for r in payload.exceptions.excessive_missing.to_dict(orient='records') %}<li>{{ r.id_card }} - {{ '%.2f'|format(r.missing_hours) }}</li>{% endfor %}</ul><div class="small-note">Employees with Excessive Absenteeism</div><ul class="small-note">{% for r in payload.exceptions.excessive_absent.to_dict(orient='records') %}<li>{{ r.id_card }} - {{ r.absenteeism_days }}</li>{% endfor %}</ul></div></div>
+  </div>
+
+  <div class="row g-3 mb-3">
+    <div class="col-md-6"><div class="panel p-3"><div class="section-title">Manpower Risk Analysis</div><ul class="small-note mb-0"><li>Increasing Absenteeism: {{ payload.risks.increasing_absenteeism|join(', ') or 'None' }}</li><li>Increasing Overtime: {{ payload.risks.increasing_overtime|join(', ') or 'None' }}</li><li>Recurring Missing Hours: {{ payload.risks.recurring_missing_hours|join(', ') or 'None' }}</li><li>Low Attendance for 2 Consecutive Months: {{ payload.risks.low_attendance_2_months|join(', ') or 'None' }}</li><li>Excessive Leave Utilization: {{ payload.risks.excessive_leave|join(', ') or 'None' }}</li><li>Departments Needing Intervention: {{ payload.risks.needs_intervention|join(', ') or 'None' }}</li></ul></div></div>
+    <div class="col-md-6"><div class="panel p-3"><div class="section-title">Trend Forecasting</div><div class="small-note">Future Absenteeism Trend</div><ul class="small-note">{% for r in payload.forecasts.absenteeism %}<li>{{ r.month }}: {{ r.forecast }}%</li>{% endfor %}</ul><div class="small-note">Future Overtime Requirements</div><ul class="small-note">{% for r in payload.forecasts.overtime %}<li>{{ r.month }}: {{ r.forecast }}%</li>{% endfor %}</ul><div class="small-note">Potential Manpower Shortage Index</div><ul class="small-note">{% for r in payload.shortages %}<li>{{ r.month }}: {{ r.risk_index }}</li>{% endfor %}</ul></div></div>
+  </div>
+
+  <div class="panel p-3 mb-3">
+    <div class="section-title">Headcount Analysis</div>
+    <div class="row g-3">
+      <div class="col-md-6"><canvas id="joinersLeaversChart"></canvas></div>
+      <div class="col-md-6"><canvas id="deptHeadcountChart"></canvas></div>
+    </div>
+  </div>
+
+  <div class="panel p-3">
+    <div class="section-title">Leave Utilization by Leave Type and Department (Positioned at end)</div>
+    <div class="table-responsive">
+      <table class="table table-sm table-striped mb-0">
+        <thead><tr><th>Department</th><th>Leave Type</th><th>Leave Qty</th></tr></thead>
+        <tbody>{% for r in payload.leave_utilization.to_dict(orient='records') %}<tr><td>{{ r.department }}</td><td>{{ r.leave_type }}</td><td>{{ '%.2f'|format(r.leave_qty) }}</td></tr>{% endfor %}</tbody>
+      </table>
+    </div>
+  </div>
+  {% endif %}
+</div>
+
+<script>
+const charts = {{ chart_data_json|safe }};
+const palette = ['#60a5fa','#22d3ee','#34d399','#f59e0b','#f87171','#c084fc','#f472b6','#38bdf8','#2dd4bf'];
+function renderChart(el, cfg, overrideType=null) {
+  const node = document.getElementById(el); if (!node || !cfg) return;
+  new Chart(node.getContext('2d'), {
+    type: overrideType || cfg.type || 'bar',
+    data: { labels: cfg.labels, datasets: cfg.datasets.map((d,i)=>({ ...d, borderColor: d.backgroundColor || palette[i%palette.length], backgroundColor: d.backgroundColor || palette[i%palette.length], tension:.25 })) },
+    options: { responsive: true, maintainAspectRatio: true, plugins: { legend: { labels: { color: '#e5e7eb' } } }, scales: { x: { ticks: { color: '#cbd5e1' } }, y: { ticks: { color: '#cbd5e1' } } } }
+  });
+}
+renderChart('deptKpiChart', charts.dept_kpis, 'bar');
+renderChart('attendanceTrendChart', charts.attendance_trend, 'line');
+renderChart('absenteeismTrendChart', charts.absenteeism_trend, 'line');
+renderChart('otTrendChart', charts.ot_trend, 'line');
+renderChart('ot1TrendChart', charts.ot1_trend, 'line');
+renderChart('ot2TrendChart', charts.ot2_trend, 'line');
+renderChart('ot3TrendChart', charts.ot3_trend, 'line');
+
+{% if payload %}
+const hcMonthly = {{ payload.headcount.monthly.to_json(orient='records')|safe }};
+new Chart(document.getElementById('headcountTrendChart').getContext('2d'), {
+  type: 'line',
+  data: { labels: hcMonthly.map(x=>x.month), datasets: [{ label:'Headcount', data: hcMonthly.map(x=>x.headcount), borderColor:'#22d3ee', backgroundColor:'#22d3ee', tension:.25 }] },
+  options: { responsive:true, plugins: { legend: { labels: { color:'#e5e7eb' } } }, scales:{ x:{ ticks:{ color:'#cbd5e1' } }, y:{ ticks:{ color:'#cbd5e1' } } } }
+});
+const joiners = {{ payload.headcount.joiners.to_json(orient='records')|safe }};
+const leavers = {{ payload.headcount.leavers.to_json(orient='records')|safe }};
+const jlLabels = joiners.map(x=>x.month);
+new Chart(document.getElementById('joinersLeaversChart').getContext('2d'), {
+  type: 'bar',
+  data: { labels: jlLabels, datasets: [{label:'Joiners', data: joiners.map(x=>x.joiners), backgroundColor:'#34d399'}, {label:'Leavers', data: leavers.map(x=>x.leavers), backgroundColor:'#f87171'}] },
+  options: { responsive:true, plugins:{ legend:{ labels:{ color:'#e5e7eb' } } }, scales:{ x:{ ticks:{ color:'#cbd5e1' } }, y:{ ticks:{ color:'#cbd5e1' } } } }
+});
+const deptHC = {{ payload.headcount.department.to_json(orient='records')|safe }};
+new Chart(document.getElementById('deptHeadcountChart').getContext('2d'), {
+  type: 'bar',
+  data: { labels: deptHC.map(x=>x.department), datasets: [{label:'Department Headcount', data: deptHC.map(x=>x.headcount), backgroundColor:'#60a5fa'}] },
+  options: { responsive:true, plugins:{ legend:{ labels:{ color:'#e5e7eb' } } }, scales:{ x:{ ticks:{ color:'#cbd5e1' } }, y:{ ticks:{ color:'#cbd5e1' } } } }
+});
+{% endif %}
+
+document.querySelectorAll('.heat').forEach(el => {
+  const v = Number(el.dataset.val || 0);
+  const intensity = Math.min(1, v / 20);
+  const r = Math.round(34 + (239 - 34) * intensity);
+  const g = Math.round(197 + (68 - 197) * intensity);
+  const b = Math.round(94 + (68 - 94) * intensity);
+  el.style.backgroundColor = `rgb(${r},${g},${b})`;
+});
+</script>
+</body>
+</html>
