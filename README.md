@@ -4,10 +4,12 @@ This repository now includes a Python Flask template app that loads an attendanc
 
 - OT1 / OT2 / OT3 monthly percentages by department
 - Leave %, Missing Hours %, Attendance %, Absenteeism % (monthly, by department)
-- Top employees by absenteeism, missing hours, and overtime
-- Department rankings (attendance, absenteeism, missing hours, overtime)
+- Top ID cards by absenteeism, missing hours, and overtime
+- Department rankings/scorecards (attendance, absenteeism, leave, missing hours, overtime)
 - Leave utilization by leave type and department
 - Absenteeism vs overtime trend/correlation by department
+- Exception reports, manpower risk analysis, and simple trend forecasting
+- Heatmap matrix views and OT1/OT2/OT3 analysis
 
 ## 1) Install
 
@@ -49,8 +51,12 @@ Visit:
 
 `http://localhost:5000`
 
+Drill-down analytics page:
+
+`http://localhost:5000/drilldown`
+
 ## Notes
 
 - The app normalizes common attendance column names automatically.
 - If your sheet uses different headers, update `COLUMN_ALIASES` in `app.py`.
-- Interactive filters are available for date range, department, employee, and leave type.
+- Multi-select interactive filters are available for department, ID card, leave type, month, year, and date range.
