@@ -361,6 +361,8 @@ def consecutive_absence_report(df: pd.DataFrame) -> pd.DataFrame:
             max_streak = max(max_streak, streak)
         if max_streak >= 3:
             rows.append({"id_card": id_card, "department": dept, "max_consecutive_absences": max_streak})
+    if not rows:
+        return pd.DataFrame(columns=["id_card", "department", "max_consecutive_absences"])
     return pd.DataFrame(rows).sort_values("max_consecutive_absences", ascending=False).reset_index(drop=True)
 
 
