@@ -1,0 +1,236 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Sabrina Attendance Executive Dashboard</title>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+  <style>
+    body { background: #f6f8fb; }
+    .card-title { font-size: .85rem; color: #6b7280; text-transform: uppercase; }
+    .kpi { font-size: 1.6rem; font-weight: 700; }
+    .chart-card { min-height: 340px; }
+    .table-responsive { max-height: 340px; overflow: auto; }
+  </style>
+</head>
+<body>
+<div class="container-fluid p-4">
+  <div class="d-flex justify-content-between align-items-center mb-3">
+    <h3 class="mb-0">Sabrina Attendance Dashboard</h3>
+    <small class="text-muted">Data Source: {{ excel_path }}</small>
+  </div>
+
+  <div class="card mb-3">
+    <div class="card-body">
+      <form method="get" class="row g-2">
+        <div class="col-md-2">
+          <label class="form-label">Start Date</label>
+          <input type="date" name="start_date" value="{{ payload.selected_filters.start_date if payload else '' }}" class="form-control">
+        </div>
+        <div class="col-md-2">
+          <label class="form-label">End Date</label>
+          <input type="date" name="end_date" value="{{ payload.selected_filters.end_date if payload else '' }}" class="form-control">
+        </div>
+        <div class="col-md-2">
+          <label class="form-label">Department</label>
+          <select class="form-select" name="department">
+            <option value="">All</option>
+            {% if payload %}
+              {% for d in payload.filter_values.departments %}
+                <option value="{{ d }}" {% if payload.selected_filters.department == d %}selected{% endif %}>{{ d }}</option>
+              {% endfor %}
+            {% endif %}
+          </select>
+        </div>
+        <div class="col-md-2">
+          <label class="form-label">Employee</label>
+          <select class="form-select" name="employee">
+            <option value="">All</option>
+            {% if payload %}
+              {% for e in payload.filter_values.employees %}
+                <option value="{{ e }}" {% if payload.selected_filters.employee == e %}selected{% endif %}>{{ e }}</option>
+              {% endfor %}
+            {% endif %}
+          </select>
+        </div>
+        <div class="col-md-2">
+          <label class="form-label">Leave Type</label>
+          <select class="form-select" name="leave_type">
+            <option value="">All</option>
+            {% if payload %}
+              {% for lt in payload.filter_values.leave_types %}
+                <option value="{{ lt }}" {% if payload.selected_filters.leave_type == lt %}selected{% endif %}>{{ lt }}</option>
+              {% endfor %}
+            {% endif %}
+          </select>
+        </div>
+        <div class="col-md-2">
+          <label class="form-label">Excel File Path</label>
+          <input class="form-control" name="file_path" value="{{ excel_path }}">
+        </div>
+        <div class="col-12 d-flex gap-2 mt-2">
+          <button class="btn btn-primary" type="submit">Apply Filters</button>
+          <a class="btn btn-outline-secondary" href="/">Reset</a>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  {% if error %}
+    <div class="alert alert-danger">{{ error }}</div>
+  {% endif %}
+
+  {% if payload %}
+  <div class="row g-3 mb-3">
+    <div class="col-md-2"><div class="card"><div class="card-body"><div class="card-title">Overall Attendance %</div><div class="kpi">{{ payload.summary.overall_attendance_pct }}</div></div></div></div>
+    <div class="col-md-2"><div class="card"><div class="card-body"><div class="card-title">Overall Absenteeism %</div><div class="kpi">{{ payload.summary.overall_absenteeism_pct }}</div></div></div></div>
+    <div class="col-md-2"><div class="card"><div class="card-body"><div class="card-title">Overall OT %</div><div class="kpi">{{ payload.summary.overall_ot_pct }}</div></div></div></div>
+    <div class="col-md-2"><div class="card"><div class="card-body"><div class="card-title">Overall Leave %</div><div class="kpi">{{ payload.summary.overall_leave_pct }}</div></div></div></div>
+    <div class="col-md-2"><div class="card"><div class="card-body"><div class="card-title">Overall Missing Hours %</div><div class="kpi">{{ payload.summary.overall_missing_hours_pct }}</div></div></div></div>
+    <div class="col-md-2"><div class="card"><div class="card-body"><div class="card-title">Best Department</div><div class="kpi" style="font-size:1rem">{{ payload.summary.best_department }}</div></div></div></div>
+  </div>
+
+  <div class="row g-3 mb-3">
+    {% for chart_id, title in [
+      ('ot1','OT1 %'),('ot2','OT2 %'),('ot3','OT3 %'),
+      ('leave','Leave %'),('missing','Missing Hours %'),
+      ('attendance','Attendance %'),('absenteeism','Absenteeism %'),
+      ('ot_total','Overtime Hours')
+    ] %}
+      <div class="col-md-6">
+        <div class="card chart-card">
+          <div class="card-header">{{ title }} by Department (Monthly)</div>
+          <div class="card-body"><canvas id="{{ chart_id }}Chart"></canvas></div>
+        </div>
+      </div>
+    {% endfor %}
+  </div>
+
+  <div class="row g-3 mb-3">
+    <div class="col-md-6">
+      <div class="card">
+        <div class="card-header">Department Ranking</div>
+        <div class="table-responsive">
+          <table class="table table-sm table-striped mb-0">
+            <thead><tr><th>Department</th><th>Attendance Rank</th><th>Absenteeism Rank</th><th>Missing Hours Rank</th><th>Overtime Rank</th></tr></thead>
+            <tbody>
+            {% for r in payload.rankings.to_dict(orient='records') %}
+              <tr>
+                <td>{{ r.department }}</td>
+                <td>{{ r.rank_attendance }}</td>
+                <td>{{ r.rank_absenteeism }}</td>
+                <td>{{ r.rank_missing_hours }}</td>
+                <td>{{ r.rank_overtime }}</td>
+              </tr>
+            {% endfor %}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+    <div class="col-md-6">
+      <div class="card">
+        <div class="card-header">Absenteeism vs Overtime Correlation by Department</div>
+        <div class="table-responsive">
+          <table class="table table-sm table-striped mb-0">
+            <thead><tr><th>Department</th><th>Correlation</th></tr></thead>
+            <tbody>
+            {% for r in payload.absenteeism_ot_corr.to_dict(orient='records') %}
+              <tr><td>{{ r.department }}</td><td>{{ '%.3f'|format(r.correlation) }}</td></tr>
+            {% endfor %}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="row g-3">
+    <div class="col-md-4">
+      <div class="card"><div class="card-header">Top Employees: Absenteeism</div>
+        <div class="table-responsive">
+          <table class="table table-sm table-striped mb-0"><thead><tr><th>Employee</th><th>Dept</th><th>Absent Days</th></tr></thead><tbody>
+            {% for r in payload.top_absenteeism.to_dict(orient='records') %}
+              <tr><td>{{ r.employee }}</td><td>{{ r.department }}</td><td>{{ r.absenteeism_days }}</td></tr>
+            {% endfor %}
+          </tbody></table>
+        </div>
+      </div>
+    </div>
+    <div class="col-md-4">
+      <div class="card"><div class="card-header">Top Employees: Missing Hours</div>
+        <div class="table-responsive">
+          <table class="table table-sm table-striped mb-0"><thead><tr><th>Employee</th><th>Dept</th><th>Missing Hours</th></tr></thead><tbody>
+            {% for r in payload.top_missing.to_dict(orient='records') %}
+              <tr><td>{{ r.employee }}</td><td>{{ r.department }}</td><td>{{ '%.2f'|format(r.missing_hours) }}</td></tr>
+            {% endfor %}
+          </tbody></table>
+        </div>
+      </div>
+    </div>
+    <div class="col-md-4">
+      <div class="card"><div class="card-header">Top Employees: Overtime</div>
+        <div class="table-responsive">
+          <table class="table table-sm table-striped mb-0"><thead><tr><th>Employee</th><th>Dept</th><th>Overtime Hours</th></tr></thead><tbody>
+            {% for r in payload.top_overtime.to_dict(orient='records') %}
+              <tr><td>{{ r.employee }}</td><td>{{ r.department }}</td><td>{{ '%.2f'|format(r.overtime_hours) }}</td></tr>
+            {% endfor %}
+          </tbody></table>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="row g-3 mt-1">
+    <div class="col-12">
+      <div class="card">
+        <div class="card-header">Leave Utilization by Leave Type and Department</div>
+        <div class="table-responsive">
+          <table class="table table-sm table-striped mb-0">
+            <thead><tr><th>Department</th><th>Leave Type</th><th>Leave Quantity</th></tr></thead>
+            <tbody>
+            {% for r in payload.leave_utilization.to_dict(orient='records') %}
+              <tr><td>{{ r.department }}</td><td>{{ r.leave_type }}</td><td>{{ '%.2f'|format(r.leave_qty) }}</td></tr>
+            {% endfor %}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  </div>
+  {% endif %}
+</div>
+
+<script>
+const charts = {{ chart_data_json|safe }};
+function renderChart(canvasId, chartKey) {
+  const cfg = charts[chartKey];
+  if (!cfg || !document.getElementById(canvasId)) return;
+  const colors = ['#2563eb','#16a34a','#dc2626','#7c3aed','#ea580c','#0891b2','#4f46e5','#be123c','#0f766e'];
+  new Chart(document.getElementById(canvasId).getContext('2d'), {
+    type: 'line',
+    data: {
+      labels: cfg.labels,
+      datasets: cfg.datasets.map((d, i) => ({
+        label: d.label,
+        data: d.data,
+        borderColor: colors[i % colors.length],
+        backgroundColor: colors[i % colors.length],
+        tension: 0.2
+      }))
+    },
+    options: { responsive: true, plugins: { legend: { display: true } } }
+  });
+}
+renderChart('ot1Chart', 'ot1');
+renderChart('ot2Chart', 'ot2');
+renderChart('ot3Chart', 'ot3');
+renderChart('leaveChart', 'leave');
+renderChart('missingChart', 'missing');
+renderChart('attendanceChart', 'attendance');
+renderChart('absenteeismChart', 'absenteeism');
+renderChart('ot_totalChart', 'ot_total');
+</script>
+</body>
+</html>
