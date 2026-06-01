@@ -1,0 +1,93 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Attendance Executive Dashboard</title>
+  <script src="https://cdn.plot.ly/plotly-2.32.0.min.js"></script>
+  <style>
+    body { font-family: Arial, sans-serif; margin: 20px; background: #f8f9fb; }
+    h1,h2 { margin: 0 0 12px; }
+    .card-grid { display:grid; grid-template-columns: repeat(auto-fit,minmax(190px,1fr)); gap:12px; margin:16px 0; }
+    .card { background:#fff; border:1px solid #ddd; border-radius:8px; padding:12px; }
+    .row { display:grid; grid-template-columns: repeat(auto-fit,minmax(260px,1fr)); gap:16px; margin: 16px 0; }
+    .section { background:#fff; border:1px solid #ddd; border-radius:8px; padding:14px; margin-bottom:16px; overflow-x:auto; }
+    table { border-collapse: collapse; width:100%; font-size: 13px; }
+    th, td { border:1px solid #ddd; padding:6px; text-align:left; }
+    th { background:#f1f4f8; }
+    .filters { background:#fff; border:1px solid #ddd; border-radius:8px; padding:14px; }
+    .error { color:#b00020; margin:12px 0; }
+  </style>
+</head>
+<body>
+  <h1>Attendance & Workforce Dashboard</h1>
+  <p>Upload the attendance Excel file and apply filters.</p>
+
+  <form class="filters" method="post" enctype="multipart/form-data">
+    <div class="row">
+      <div><label>Attendance Excel File</label><br/><input type="file" name="attendance_file" accept=".xls,.xlsx" required /></div>
+      <div><label>Start Date</label><br/><input type="date" name="start_date" value="{{ filters.get('start_date','') }}" /></div>
+      <div><label>End Date</label><br/><input type="date" name="end_date" value="{{ filters.get('end_date','') }}" /></div>
+      <div><label>Department</label><br/>
+        <select name="department"><option value="">All</option>{% for d in options.departments %}<option value="{{ d }}" {% if filters.get('department')==d %}selected{% endif %}>{{ d }}</option>{% endfor %}</select>
+      </div>
+      <div><label>Employee</label><br/>
+        <select name="employee"><option value="">All</option>{% for e in options.employees %}<option value="{{ e }}" {% if filters.get('employee')==e %}selected{% endif %}>{{ e }}</option>{% endfor %}</select>
+      </div>
+      <div><label>Leave Type</label><br/>
+        <select name="leave_type"><option value="">All</option>{% for l in options.leave_types %}<option value="{{ l }}" {% if filters.get('leave_type')==l %}selected{% endif %}>{{ l }}</option>{% endfor %}</select>
+      </div>
+    </div>
+    <button type="submit">Generate Dashboard</button>
+  </form>
+
+  {% if error %}<div class="error"><strong>Error:</strong> {{ error }}</div>{% endif %}
+
+  {% if overall %}
+  <h2>Executive Summary</h2>
+  <div class="card-grid">
+    <div class="card"><strong>Overall Attendance %</strong><div>{{ overall.attendance }}</div></div>
+    <div class="card"><strong>Overall Absenteeism %</strong><div>{{ overall.absenteeism }}</div></div>
+    <div class="card"><strong>Overall OT %</strong><div>{{ overall.overtime }}</div></div>
+    <div class="card"><strong>Overall Leave %</strong><div>{{ overall.leave }}</div></div>
+    <div class="card"><strong>Overall Missing Hours %</strong><div>{{ overall.missing }}</div></div>
+  </div>
+
+  <div class="row">
+    <div class="section">
+      <h3>Best Performing Department</h3>
+      {% if best_dept %}<table><tr>{% for k in best_dept[0].keys() %}<th>{{ k }}</th>{% endfor %}</tr><tr>{% for v in best_dept[0].values() %}<td>{{ v }}</td>{% endfor %}</tr></table>{% endif %}
+    </div>
+    <div class="section">
+      <h3>Department Requiring Attention</h3>
+      {% if attention_dept %}<table><tr>{% for k in attention_dept[0].keys() %}<th>{{ k }}</th>{% endfor %}</tr><tr>{% for v in attention_dept[0].values() %}<td>{{ v }}</td>{% endfor %}</tr></table>{% endif %}
+    </div>
+  </div>
+
+  <div class="section"><h3>Top Employees - Highest Absenteeism & Missing Hours</h3>{{ render_table(tables.top_absent) }}</div>
+  <div class="section"><h3>Top Employees - Highest Missing Hours</h3>{{ render_table(tables.top_missing) }}</div>
+  <div class="section"><h3>Top Employees - Highest Overtime</h3>{{ render_table(tables.top_overtime) }}</div>
+
+  <div class="section"><h3>Monthly OT1/OT2/OT3 % by Department</h3><div id="chart_ot"></div></div>
+  <div class="section"><h3>Monthly Leave % by Department</h3><div id="chart_leave"></div></div>
+  <div class="section"><h3>Monthly Missing Hours % by Department</h3><div id="chart_missing"></div></div>
+  <div class="section"><h3>Monthly Attendance % by Department</h3><div id="chart_attendance"></div></div>
+  <div class="section"><h3>Monthly Absenteeism % by Department</h3><div id="chart_absenteeism"></div></div>
+  <div class="section"><h3>Department Comparison</h3><div id="chart_comparison"></div></div>
+
+  <div class="section"><h3>Monthly Summary Table</h3>{{ render_table(tables.monthly) }}</div>
+  <div class="section"><h3>Department Summary Table</h3>{{ render_table(tables.dept_summary) }}</div>
+  <div class="section"><h3>Rankings by Department</h3>{{ render_table(tables.rankings) }}</div>
+  <div class="section"><h3>Leave Utilization by Leave Type & Department</h3>{{ render_table(tables.leave_util) }}</div>
+  <div class="section"><h3>Absenteeism vs Overtime Relationship</h3>{{ render_table(tables.relation) }}</div>
+
+  <script>
+    const charts = {{ charts|tojson }};
+    Object.entries(charts).forEach(([key, value]) => {
+      const fig = JSON.parse(value);
+      Plotly.newPlot(`chart_${key}`, fig.data, fig.layout, {responsive: true});
+    });
+  </script>
+  {% endif %}
+</body>
+</html>
