@@ -207,6 +207,7 @@ def build_monthly_summary(monthly: pd.DataFrame) -> pd.DataFrame:
         monthly.groupby(["month", "year", "month_num"], dropna=False)
         .agg(
             attendance_pct=("attendance_pct", "mean"),
+            absenteeism_pct=("absenteeism_pct", "mean"),
             leave_pct=("leave_pct", "mean"),
             ot_pct=("ot_pct", "mean"),
             missing_hours_pct=("missing_hours_pct", "mean"),
