@@ -263,7 +263,8 @@ def build_correlation(monthly: pd.DataFrame) -> pd.DataFrame:
         return pd.DataFrame(columns=["department", "correlation", "avg_absenteeism_pct", "avg_ot_pct"])
     rows = []
     for dept, grp in monthly.groupby("department"):
-        corr = float(grp["absenteeism_pct"].corr(grp["ot_pct"])) if len(grp) > 1 else 0.0
+        with np.errstate(invalid="ignore", divide="ignore"):
+            corr = float(grp["absenteeism_pct"].corr(grp["ot_pct"])) if len(grp) > 1 else 0.0
         rows.append(
             {
                 "department": dept,
