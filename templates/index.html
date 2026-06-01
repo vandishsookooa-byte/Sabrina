@@ -1,0 +1,1055 @@
+{% extends "base.html" %}
+{% block title %}Executive Dashboard – Sabrina{% endblock %}
+
+{% block content %}
+<div class="container-fluid px-4 py-3">
+
+  <!-- ── Page header ─────────────────────────────────────────────────── -->
+  <div class="d-flex align-items-center justify-content-between mb-3">
+    <div>
+      <h4 class="page-title mb-0"><i class="bi bi-speedometer2 me-2 text-accent"></i>Executive Attendance Dashboard</h4>
+      <p class="text-muted small mb-0">Real-time workforce intelligence &amp; performance analytics</p>
+    </div>
+    <div class="d-flex gap-2">
+      <button class="btn btn-sm btn-outline-secondary" id="btnRefresh" title="Refresh data">
+        <i class="bi bi-arrow-clockwise"></i>
+      </button>
+      <button class="btn btn-sm btn-accent" id="btnApplyFilters">
+        <i class="bi bi-funnel me-1"></i>Apply Filters
+      </button>
+    </div>
+  </div>
+
+  <!-- ── Filter Panel ─────────────────────────────────────────────────── -->
+  <div class="filter-panel mb-4">
+    <div class="filter-panel-header" data-bs-toggle="collapse" data-bs-target="#filterBody">
+      <i class="bi bi-sliders me-2 text-accent"></i>
+      <strong>Filters</strong>
+      <i class="bi bi-chevron-down ms-auto toggle-icon"></i>
+    </div>
+    <div class="collapse show" id="filterBody">
+      <div class="filter-panel-body">
+        <div class="row g-3">
+          <div class="col-md-3 col-sm-6">
+            <label class="filter-label">Department</label>
+            <select id="fDept" multiple class="filter-select">
+              {% for d in filters_meta.departments %}
+              <option value="{{ d }}">{{ d }}</option>
+              {% endfor %}
+            </select>
+          </div>
+          <div class="col-md-2 col-sm-6">
+            <label class="filter-label">Year</label>
+            <select id="fYear" multiple class="filter-select">
+              {% for y in filters_meta.years %}
+              <option value="{{ y }}">{{ y }}</option>
+              {% endfor %}
+            </select>
+          </div>
+          <div class="col-md-2 col-sm-6">
+            <label class="filter-label">Month</label>
+            <select id="fMonth" multiple class="filter-select">
+              {% for m in filters_meta.months %}
+              <option value="{{ m }}">{{ ["","Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"][m] }}</option>
+              {% endfor %}
+            </select>
+          </div>
+          <div class="col-md-3 col-sm-6">
+            <label class="filter-label">Employee (ID Card)</label>
+            <select id="fEmployee" multiple class="filter-select">
+              {% for e in filters_meta.id_cards %}
+              <option value="{{ e }}">{{ e }}</option>
+              {% endfor %}
+            </select>
+          </div>
+          <div class="col-md-2 col-sm-6">
+            <label class="filter-label">Leave Type</label>
+            <select id="fLeaveType" multiple class="filter-select">
+              {% for lt in filters_meta.leave_types %}
+              <option value="{{ lt }}">{{ lt }}</option>
+              {% endfor %}
+            </select>
+          </div>
+          <div class="col-md-3 col-sm-6">
+            <label class="filter-label">Date From</label>
+            <input type="date" id="fDateFrom" class="form-control filter-input" />
+          </div>
+          <div class="col-md-3 col-sm-6">
+            <label class="filter-label">Date To</label>
+            <input type="date" id="fDateTo" class="form-control filter-input" />
+          </div>
+          <div class="col-md-6 col-sm-12 d-flex align-items-end gap-2">
+            <button class="btn btn-accent" id="btnApplyFilters2">
+              <i class="bi bi-funnel me-1"></i>Apply
+            </button>
+            <button class="btn btn-outline-secondary" id="btnClearFilters">
+              <i class="bi bi-x-circle me-1"></i>Clear
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── KPI Cards ─────────────────────────────────────────────────────── -->
+  <div class="row g-3 mb-4" id="kpiRow">
+    <div class="col-xl-2 col-md-4 col-sm-6">
+      <div class="kpi-card" id="kpi-att">
+        <div class="kpi-icon bg-blue"><i class="bi bi-person-check"></i></div>
+        <div class="kpi-body">
+          <div class="kpi-label">Attendance %</div>
+          <div class="kpi-value" id="kv-att">—</div>
+          <div class="kpi-badge" id="kb-att"></div>
+        </div>
+      </div>
+    </div>
+    <div class="col-xl-2 col-md-4 col-sm-6">
+      <div class="kpi-card" id="kpi-abs">
+        <div class="kpi-icon bg-red"><i class="bi bi-person-x"></i></div>
+        <div class="kpi-body">
+          <div class="kpi-label">Absenteeism %</div>
+          <div class="kpi-value" id="kv-abs">—</div>
+          <div class="kpi-badge" id="kb-abs"></div>
+        </div>
+      </div>
+    </div>
+    <div class="col-xl-2 col-md-4 col-sm-6">
+      <div class="kpi-card" id="kpi-ot">
+        <div class="kpi-icon bg-orange"><i class="bi bi-clock-history"></i></div>
+        <div class="kpi-body">
+          <div class="kpi-label">Overtime %</div>
+          <div class="kpi-value" id="kv-ot">—</div>
+          <div class="kpi-badge" id="kb-ot"></div>
+        </div>
+      </div>
+    </div>
+    <div class="col-xl-2 col-md-4 col-sm-6">
+      <div class="kpi-card" id="kpi-leave">
+        <div class="kpi-icon bg-purple"><i class="bi bi-calendar-minus"></i></div>
+        <div class="kpi-body">
+          <div class="kpi-label">Leave %</div>
+          <div class="kpi-value" id="kv-leave">—</div>
+          <div class="kpi-badge" id="kb-leave"></div>
+        </div>
+      </div>
+    </div>
+    <div class="col-xl-2 col-md-4 col-sm-6">
+      <div class="kpi-card" id="kpi-miss">
+        <div class="kpi-icon bg-yellow"><i class="bi bi-hourglass-split"></i></div>
+        <div class="kpi-body">
+          <div class="kpi-label">Missing Hours %</div>
+          <div class="kpi-value" id="kv-miss">—</div>
+          <div class="kpi-badge" id="kb-miss"></div>
+        </div>
+      </div>
+    </div>
+    <div class="col-xl-2 col-md-4 col-sm-6">
+      <div class="kpi-card" id="kpi-hc">
+        <div class="kpi-icon bg-teal"><i class="bi bi-people"></i></div>
+        <div class="kpi-body">
+          <div class="kpi-label">Total Headcount</div>
+          <div class="kpi-value" id="kv-hc">—</div>
+          <div class="kpi-badge" id="kb-hc"></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── Executive Summary banners ─────────────────────────────────────── -->
+  <div class="row g-3 mb-4">
+    <div class="col-md-6">
+      <div class="summary-banner banner-green">
+        <i class="bi bi-trophy-fill me-2"></i>
+        <span class="banner-label">Best Performing Department:</span>
+        <span class="banner-value" id="bestDept">—</span>
+      </div>
+    </div>
+    <div class="col-md-6">
+      <div class="summary-banner banner-red">
+        <i class="bi bi-exclamation-triangle-fill me-2"></i>
+        <span class="banner-label">Requires Immediate Attention:</span>
+        <span class="banner-value" id="worstDept">—</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── Monthly Summary Table ──────────────────────────────────────────── -->
+  <div class="section-card mb-4">
+    <div class="section-header">
+      <i class="bi bi-table me-2 text-accent"></i>Monthly Summary
+    </div>
+    <div class="table-responsive">
+      <table class="data-table" id="monthlySummaryTable">
+        <thead>
+          <tr>
+            <th>Month</th><th>Year</th><th>Headcount</th>
+            <th>Attendance %</th><th>Absenteeism %</th>
+            <th>Leave %</th><th>Missing Hrs %</th><th>OT %</th>
+          </tr>
+        </thead>
+        <tbody id="monthlySummaryBody"></tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- ── Monthly Trend Charts ───────────────────────────────────────────── -->
+  <div class="row g-3 mb-4">
+    <div class="col-lg-6">
+      <div class="section-card h-100">
+        <div class="section-header"><i class="bi bi-graph-up me-2 text-accent"></i>Monthly Attendance & Absenteeism Trend</div>
+        <div id="chartAttTrend" class="chart-container"></div>
+      </div>
+    </div>
+    <div class="col-lg-6">
+      <div class="section-card h-100">
+        <div class="section-header"><i class="bi bi-graph-up me-2 text-accent"></i>Monthly OT1 / OT2 / OT3 Trend</div>
+        <div id="chartOTTrend" class="chart-container"></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="row g-3 mb-4">
+    <div class="col-lg-6">
+      <div class="section-card h-100">
+        <div class="section-header"><i class="bi bi-graph-up me-2 text-accent"></i>Monthly Leave % Trend</div>
+        <div id="chartLeaveTrend" class="chart-container"></div>
+      </div>
+    </div>
+    <div class="col-lg-6">
+      <div class="section-card h-100">
+        <div class="section-header"><i class="bi bi-graph-up me-2 text-accent"></i>Monthly Missing Hours % Trend</div>
+        <div id="chartMissingTrend" class="chart-container"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── Department Comparison Bar Charts ──────────────────────────────── -->
+  <div class="row g-3 mb-4">
+    <div class="col-lg-6">
+      <div class="section-card h-100">
+        <div class="section-header"><i class="bi bi-bar-chart me-2 text-accent"></i>Department Attendance %</div>
+        <div id="chartDeptAtt" class="chart-container"></div>
+      </div>
+    </div>
+    <div class="col-lg-6">
+      <div class="section-card h-100">
+        <div class="section-header"><i class="bi bi-bar-chart me-2 text-accent"></i>Department Absenteeism %</div>
+        <div id="chartDeptAbs" class="chart-container"></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="row g-3 mb-4">
+    <div class="col-lg-6">
+      <div class="section-card h-100">
+        <div class="section-header"><i class="bi bi-bar-chart me-2 text-accent"></i>Department OT %</div>
+        <div id="chartDeptOT" class="chart-container"></div>
+      </div>
+    </div>
+    <div class="col-lg-6">
+      <div class="section-card h-100">
+        <div class="section-header"><i class="bi bi-bar-chart me-2 text-accent"></i>Department Missing Hours %</div>
+        <div id="chartDeptMiss" class="chart-container"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── Absenteeism vs OT Correlation ─────────────────────────────────── -->
+  <div class="row g-3 mb-4">
+    <div class="col-12">
+      <div class="section-card">
+        <div class="section-header"><i class="bi bi-scatter-chart me-2 text-accent"></i>Absenteeism vs Overtime Correlation by Department</div>
+        <div id="chartCorrelation" class="chart-container"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── OT Analysis ─────────────────────────────────────────────────────── -->
+  <div class="section-card mb-4">
+    <div class="section-header"><i class="bi bi-clock-history me-2 text-accent"></i>Overtime Analysis – OT1 / OT2 / OT3 by Department</div>
+    <div class="table-responsive">
+      <table class="data-table" id="otBreakdownTable">
+        <thead>
+          <tr>
+            <th>Rank</th><th>Department</th>
+            <th>OT1 %</th><th>OT2 %</th><th>OT3 %</th><th>Total OT %</th>
+            <th>OT1 Hrs</th><th>OT2 Hrs</th><th>OT3 Hrs</th><th>Total OT Hrs</th>
+          </tr>
+        </thead>
+        <tbody id="otBreakdownBody"></tbody>
+      </table>
+    </div>
+    <div class="row g-3 mt-2">
+      <div class="col-lg-4">
+        <div class="section-header small"><i class="bi bi-trophy me-1 text-accent"></i>Top 5 – OT1 %</div>
+        <div id="chartTopOT1" class="chart-container" style="height:220px;"></div>
+      </div>
+      <div class="col-lg-4">
+        <div class="section-header small"><i class="bi bi-trophy me-1 text-accent"></i>Top 5 – OT2 %</div>
+        <div id="chartTopOT2" class="chart-container" style="height:220px;"></div>
+      </div>
+      <div class="col-lg-4">
+        <div class="section-header small"><i class="bi bi-trophy me-1 text-accent"></i>Top 5 – OT3 %</div>
+        <div id="chartTopOT3" class="chart-container" style="height:220px;"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── Heat Maps ─────────────────────────────────────────────────────── -->
+  <div class="row g-3 mb-4">
+    <div class="col-lg-6">
+      <div class="section-card h-100">
+        <div class="section-header"><i class="bi bi-grid-3x3-gap me-2 text-accent"></i>Heat Map – Attendance %</div>
+        <div id="heatAtt" class="chart-container"></div>
+      </div>
+    </div>
+    <div class="col-lg-6">
+      <div class="section-card h-100">
+        <div class="section-header"><i class="bi bi-grid-3x3-gap me-2 text-accent"></i>Heat Map – Absenteeism %</div>
+        <div id="heatAbs" class="chart-container"></div>
+      </div>
+    </div>
+  </div>
+  <div class="row g-3 mb-4">
+    <div class="col-lg-6">
+      <div class="section-card h-100">
+        <div class="section-header"><i class="bi bi-grid-3x3-gap me-2 text-accent"></i>Heat Map – Missing Hours %</div>
+        <div id="heatMiss" class="chart-container"></div>
+      </div>
+    </div>
+    <div class="col-lg-6">
+      <div class="section-card h-100">
+        <div class="section-header"><i class="bi bi-grid-3x3-gap me-2 text-accent"></i>Heat Map – Overtime %</div>
+        <div id="heatOT" class="chart-container"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── Department Performance Scorecard ──────────────────────────────── -->
+  <div class="section-card mb-4">
+    <div class="section-header"><i class="bi bi-award me-2 text-accent"></i>Department Performance Scorecard &amp; Rankings</div>
+    <div class="table-responsive">
+      <table class="data-table" id="scorecardTable">
+        <thead>
+          <tr>
+            <th>Rank</th><th>Department</th><th>Headcount</th>
+            <th>Attendance %</th><th>Absenteeism %</th>
+            <th>Leave %</th><th>Missing Hrs %</th><th>OT %</th>
+            <th>Score</th>
+          </tr>
+        </thead>
+        <tbody id="scorecardBody"></tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- ── Department Rankings ───────────────────────────────────────────── -->
+  <div class="row g-3 mb-4">
+    <div class="col-md-6 col-xl-3">
+      <div class="section-card h-100">
+        <div class="section-header"><i class="bi bi-trophy text-success me-1"></i>Top 5 – Attendance</div>
+        <div id="rankingAttBody" class="ranking-list"></div>
+      </div>
+    </div>
+    <div class="col-md-6 col-xl-3">
+      <div class="section-card h-100">
+        <div class="section-header"><i class="bi bi-exclamation-circle text-danger me-1"></i>Top 5 – Absenteeism</div>
+        <div id="rankingAbsBody" class="ranking-list"></div>
+      </div>
+    </div>
+    <div class="col-md-6 col-xl-3">
+      <div class="section-card h-100">
+        <div class="section-header"><i class="bi bi-clock text-warning me-1"></i>Top 5 – Overtime</div>
+        <div id="rankingOTBody" class="ranking-list"></div>
+      </div>
+    </div>
+    <div class="col-md-6 col-xl-3">
+      <div class="section-card h-100">
+        <div class="section-header"><i class="bi bi-hourglass text-info me-1"></i>Top 5 – Missing Hours</div>
+        <div id="rankingMissBody" class="ranking-list"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── Employee Top-10 Rankings ──────────────────────────────────────── -->
+  <div class="row g-3 mb-4">
+    <div class="col-lg-4">
+      <div class="section-card h-100">
+        <div class="section-header"><i class="bi bi-person-badge me-2 text-warning"></i>Top 10 – Highest OT</div>
+        <div class="table-responsive">
+          <table class="data-table">
+            <thead><tr><th>#</th><th>ID Card</th><th>Dept</th><th>OT Hrs</th><th>OT %</th></tr></thead>
+            <tbody id="topOTBody"></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+    <div class="col-lg-4">
+      <div class="section-card h-100">
+        <div class="section-header"><i class="bi bi-person-badge me-2 text-info"></i>Top 10 – Highest Missing Hrs</div>
+        <div class="table-responsive">
+          <table class="data-table">
+            <thead><tr><th>#</th><th>ID Card</th><th>Dept</th><th>Miss Hrs</th><th>Miss %</th></tr></thead>
+            <tbody id="topMissBody"></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+    <div class="col-lg-4">
+      <div class="section-card h-100">
+        <div class="section-header"><i class="bi bi-person-badge me-2 text-danger"></i>Top 10 – Highest Absenteeism</div>
+        <div class="table-responsive">
+          <table class="data-table">
+            <thead><tr><th>#</th><th>ID Card</th><th>Dept</th><th>Abs %</th></tr></thead>
+            <tbody id="topAbsBody"></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── Leave Analysis ─────────────────────────────────────────────────── -->
+  <div class="section-card mb-4">
+    <div class="section-header"><i class="bi bi-calendar-minus me-2 text-accent"></i>Leave Utilisation by Type &amp; Department</div>
+    <div class="row g-3">
+      <div class="col-lg-6">
+        <div id="chartLeaveByType" class="chart-container"></div>
+      </div>
+      <div class="col-lg-6">
+        <div id="chartLeaveByDept" class="chart-container"></div>
+      </div>
+    </div>
+    <div class="table-responsive mt-3">
+      <table class="data-table" id="leaveTable">
+        <thead>
+          <tr><th>Leave Type</th><th>Department</th><th>Total Leave Days</th><th>Employees</th></tr>
+        </thead>
+        <tbody id="leaveTableBody"></tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- ── Manpower Risk Analysis ─────────────────────────────────────────── -->
+  <div class="section-card mb-4">
+    <div class="section-header"><i class="bi bi-shield-exclamation me-2 text-danger"></i>Manpower Risk Analysis</div>
+    <div class="row g-3">
+      <div class="col-md-6 col-lg-4">
+        <div class="risk-box risk-red">
+          <div class="risk-title"><i class="bi bi-arrow-up-circle me-1"></i>Increasing Absenteeism Trend</div>
+          <ul class="risk-list" id="riskIncAbs"><li class="text-muted">Loading…</li></ul>
+        </div>
+      </div>
+      <div class="col-md-6 col-lg-4">
+        <div class="risk-box risk-orange">
+          <div class="risk-title"><i class="bi bi-arrow-up-circle me-1"></i>Increasing OT Trend</div>
+          <ul class="risk-list" id="riskIncOT"><li class="text-muted">Loading…</li></ul>
+        </div>
+      </div>
+      <div class="col-md-6 col-lg-4">
+        <div class="risk-box risk-red">
+          <div class="risk-title"><i class="bi bi-calendar-x me-1"></i>Low Attendance (2+ Months)</div>
+          <ul class="risk-list" id="riskLowAtt"><li class="text-muted">Loading…</li></ul>
+        </div>
+      </div>
+      <div class="col-md-6 col-lg-4">
+        <div class="risk-box risk-yellow">
+          <div class="risk-title"><i class="bi bi-calendar-minus me-1"></i>Excessive Leave Utilisation</div>
+          <ul class="risk-list" id="riskExcLeave"><li class="text-muted">Loading…</li></ul>
+        </div>
+      </div>
+      <div class="col-md-6 col-lg-4">
+        <div class="risk-box risk-yellow">
+          <div class="risk-title"><i class="bi bi-hourglass me-1"></i>High Missing Hours Pattern</div>
+          <ul class="risk-list" id="riskMissHrs"><li class="text-muted">Loading…</li></ul>
+        </div>
+      </div>
+      <div class="col-md-6 col-lg-4">
+        <div class="risk-box risk-red">
+          <div class="risk-title"><i class="bi bi-exclamation-diamond me-1"></i>Departments Requiring Intervention</div>
+          <ul class="risk-list" id="riskIntervention"><li class="text-muted">Loading…</li></ul>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── Exception Reports ──────────────────────────────────────────────── -->
+  <div class="section-card mb-4">
+    <div class="section-header"><i class="bi bi-flag me-2 text-warning"></i>Exception Reports</div>
+    <ul class="nav nav-tabs exception-tabs mb-3" id="exceptionTabs">
+      <li class="nav-item"><a class="nav-link active" data-tab="exc-abs" href="#">Excessive Absenteeism</a></li>
+      <li class="nav-item"><a class="nav-link" data-tab="exc-ot" href="#">Excessive OT</a></li>
+      <li class="nav-item"><a class="nav-link" data-tab="exc-miss" href="#">Excessive Missing Hrs</a></li>
+      <li class="nav-item"><a class="nav-link" data-tab="exc-noleave" href="#">No Leave Taken</a></li>
+      <li class="nav-item"><a class="nav-link" data-tab="exc-consec" href="#">3+ Consecutive Absences</a></li>
+    </ul>
+    <div id="exc-abs" class="exception-panel active table-responsive">
+      <table class="data-table"><thead><tr><th>#</th><th>ID Card</th><th>Department</th><th>Absenteeism %</th></tr></thead>
+      <tbody id="excAbsBody"></tbody></table>
+    </div>
+    <div id="exc-ot" class="exception-panel table-responsive" style="display:none">
+      <table class="data-table"><thead><tr><th>#</th><th>ID Card</th><th>Department</th><th>OT %</th><th>OT Hrs</th></tr></thead>
+      <tbody id="excOTBody"></tbody></table>
+    </div>
+    <div id="exc-miss" class="exception-panel table-responsive" style="display:none">
+      <table class="data-table"><thead><tr><th>#</th><th>ID Card</th><th>Department</th><th>Missing %</th><th>Missing Hrs</th></tr></thead>
+      <tbody id="excMissBody"></tbody></table>
+    </div>
+    <div id="exc-noleave" class="exception-panel table-responsive" style="display:none">
+      <table class="data-table"><thead><tr><th>#</th><th>ID Card</th><th>Department</th></tr></thead>
+      <tbody id="excNoLeaveBody"></tbody></table>
+    </div>
+    <div id="exc-consec" class="exception-panel table-responsive" style="display:none">
+      <table class="data-table"><thead><tr><th>#</th><th>ID Card</th><th>Department</th><th>Max Consecutive Absences</th></tr></thead>
+      <tbody id="excConsecBody"></tbody></table>
+    </div>
+  </div>
+
+  <!-- ── Trend Forecasting ──────────────────────────────────────────────── -->
+  <div class="section-card mb-4">
+    <div class="section-header"><i class="bi bi-lightning me-2 text-accent"></i>Trend Forecasting (Next 3 Months)</div>
+    <div class="row g-3">
+      <div class="col-lg-6">
+        <div id="chartForecastAtt" class="chart-container"></div>
+      </div>
+      <div class="col-lg-6">
+        <div id="chartForecastAbs" class="chart-container"></div>
+      </div>
+    </div>
+    <div class="row g-3 mt-1">
+      <div class="col-lg-6">
+        <div id="chartForecastOT" class="chart-container"></div>
+      </div>
+      <div class="col-lg-6">
+        <div id="chartForecastMiss" class="chart-container"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── Management Insights ────────────────────────────────────────────── -->
+  <div class="section-card mb-4">
+    <div class="section-header"><i class="bi bi-lightbulb me-2 text-accent"></i>Management Insights &amp; Action Points</div>
+    <div id="insightsList" class="row g-3"></div>
+  </div>
+
+</div><!-- /container-fluid -->
+
+<!-- Loading overlay -->
+<div id="loadingOverlay" class="loading-overlay" style="display:none">
+  <div class="spinner-border text-accent" role="status" style="width:3rem;height:3rem;">
+    <span class="visually-hidden">Loading…</span>
+  </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+// ────────────────────────────────────────────────────────────────────────────
+// Choices.js initialisation
+// ────────────────────────────────────────────────────────────────────────────
+const choicesOpts = {
+  removeItemButton: true,
+  searchEnabled: true,
+  placeholder: true,
+  placeholderValue: 'All',
+  itemSelectText: '',
+  classNames: { containerOuter: 'choices dark-choices' },
+};
+['fDept','fYear','fMonth','fEmployee','fLeaveType'].forEach(id => {
+  const el = document.getElementById(id);
+  if (el) new Choices(el, choicesOpts);
+});
+
+// ────────────────────────────────────────────────────────────────────────────
+// Plotly dark layout defaults
+// ────────────────────────────────────────────────────────────────────────────
+const PLOTLY_LAYOUT = {
+  paper_bgcolor: 'rgba(0,0,0,0)',
+  plot_bgcolor:  'rgba(0,0,0,0)',
+  font:          { color: '#c9d1d9', size: 11 },
+  margin:        { t: 30, b: 50, l: 50, r: 20 },
+  xaxis:         { gridcolor: '#21262d', zerolinecolor: '#21262d' },
+  yaxis:         { gridcolor: '#21262d', zerolinecolor: '#21262d' },
+  legend:        { bgcolor: 'rgba(0,0,0,0)', font: { size: 10 } },
+  colorway:      ['#4a9eff','#f39c12','#2ecc71','#e74c3c','#9b59b6','#1abc9c','#e67e22','#3498db'],
+};
+const PLOTLY_CONFIG = { responsive: true, displayModeBar: false };
+
+const DEPT_COLORS = {
+  'Dyeing':'#4a9eff','Knitting':'#f39c12','Finishing':'#2ecc71','Quality Control':'#e74c3c',
+  'Maintenance':'#9b59b6','Administration':'#1abc9c','Human Resources':'#e67e22',
+  'Finance':'#3498db','Logistics':'#f1c40f','Production':'#e91e63'
+};
+function deptColor(d){ return DEPT_COLORS[d] || '#4a9eff'; }
+
+// ────────────────────────────────────────────────────────────────────────────
+// Filter collection
+// ────────────────────────────────────────────────────────────────────────────
+function getFilterParams() {
+  const params = new URLSearchParams();
+  const getMulti = id => {
+    const el = document.getElementById(id);
+    if (!el) return [];
+    return Array.from(el.selectedOptions).map(o => o.value);
+  };
+  getMulti('fDept').forEach(v => params.append('departments', v));
+  getMulti('fYear').forEach(v => params.append('years', v));
+  getMulti('fMonth').forEach(v => params.append('months', v));
+  getMulti('fEmployee').forEach(v => params.append('id_cards', v));
+  getMulti('fLeaveType').forEach(v => params.append('leave_types', v));
+  const df = document.getElementById('fDateFrom').value;
+  const dt = document.getElementById('fDateTo').value;
+  if (df) params.set('date_from', df);
+  if (dt) params.set('date_to', dt);
+  return params;
+}
+
+// ────────────────────────────────────────────────────────────────────────────
+// Traffic light badge
+// ────────────────────────────────────────────────────────────────────────────
+function badge(light) {
+  const map = { green: ['bg-success','Optimal'], yellow: ['bg-warning text-dark','Monitor'], red: ['bg-danger','Critical'] };
+  const [cls, label] = map[light] || ['bg-secondary','N/A'];
+  return `<span class="badge ${cls}">${label}</span>`;
+}
+
+// ────────────────────────────────────────────────────────────────────────────
+// Render KPI cards
+// ────────────────────────────────────────────────────────────────────────────
+function renderKPIs(kpis) {
+  const map = [
+    ['att',   'att_pct',        '%'],
+    ['abs',   'abs_pct',        '%'],
+    ['ot',    'total_ot_pct',   '%'],
+    ['leave', 'leave_pct',      '%'],
+    ['miss',  'missing_pct',    '%'],
+    ['hc',    'headcount',      ''],
+  ];
+  map.forEach(([key, field, unit]) => {
+    const v = kpis[field];
+    if (v === undefined) return;
+    const val = typeof v === 'object' ? v.value : v;
+    const light = typeof v === 'object' ? v.light : null;
+    document.getElementById('kv-'+key).textContent = val + unit;
+    const badgeEl = document.getElementById('kb-'+key);
+    if (badgeEl) badgeEl.innerHTML = light ? badge(light) : '';
+
+    // Colour the KPI card border
+    const card = document.getElementById('kpi-'+key);
+    if (card && light) {
+      card.classList.remove('kpi-green','kpi-yellow','kpi-red');
+      card.classList.add('kpi-'+light);
+    }
+  });
+}
+
+// ────────────────────────────────────────────────────────────────────────────
+// Monthly summary table
+// ────────────────────────────────────────────────────────────────────────────
+function renderMonthlySummary(monthData) {
+  const tbody = document.getElementById('monthlySummaryBody');
+  tbody.innerHTML = monthData.map(r => `
+    <tr>
+      <td>${r.month_name}</td><td>${r.year}</td>
+      <td>${r.headcount}</td>
+      <td class="${lightClass(r.att_pct,'att')}">${r.att_pct}%</td>
+      <td class="${lightClass(r.abs_pct,'abs')}">${r.abs_pct}%</td>
+      <td>${r.leave_pct}%</td><td>${r.missing_pct}%</td>
+      <td class="${lightClass(r.total_ot_pct,'ot')}">${r.total_ot_pct}%</td>
+    </tr>`).join('');
+}
+
+function lightClass(val, type) {
+  if (type === 'att') return val >= 95 ? 'text-success' : val >= 85 ? 'text-warning' : 'text-danger';
+  if (type === 'abs') return val <= 5  ? 'text-success' : val <= 15 ? 'text-warning' : 'text-danger';
+  if (type === 'ot')  return val <= 10 ? 'text-success' : val <= 20 ? 'text-warning' : 'text-danger';
+  return '';
+}
+
+// ────────────────────────────────────────────────────────────────────────────
+// Line trend chart helper
+// ────────────────────────────────────────────────────────────────────────────
+function lineTrend(divId, title, labels, traces) {
+  const layout = { ...PLOTLY_LAYOUT, title: { text: '', font: { size: 12 } } };
+  Plotly.newPlot(divId, traces, layout, PLOTLY_CONFIG);
+}
+
+// ────────────────────────────────────────────────────────────────────────────
+// Render monthly trend charts
+// ────────────────────────────────────────────────────────────────────────────
+function renderTrends(monthData) {
+  const labels = monthData.map(r => r.month_name + ' ' + r.year);
+
+  // Attendance & Absenteeism
+  lineTrend('chartAttTrend', 'Att/Abs', labels, [
+    { x: labels, y: monthData.map(r => r.att_pct),  mode: 'lines+markers', name: 'Attendance %',  line: { color: '#2ecc71', width: 2 }, marker: { size: 5 } },
+    { x: labels, y: monthData.map(r => r.abs_pct),  mode: 'lines+markers', name: 'Absenteeism %', line: { color: '#e74c3c', width: 2 }, marker: { size: 5 } },
+  ]);
+
+  // OT trend
+  lineTrend('chartOTTrend', 'OT Trend', labels, [
+    { x: labels, y: monthData.map(r => r.ot1_pct),       mode: 'lines+markers', name: 'OT1 %', line: { color: '#4a9eff', width: 2 }, marker: { size: 5 } },
+    { x: labels, y: monthData.map(r => r.ot2_pct),       mode: 'lines+markers', name: 'OT2 %', line: { color: '#f39c12', width: 2 }, marker: { size: 5 } },
+    { x: labels, y: monthData.map(r => r.ot3_pct),       mode: 'lines+markers', name: 'OT3 %', line: { color: '#9b59b6', width: 2 }, marker: { size: 5 } },
+    { x: labels, y: monthData.map(r => r.total_ot_pct),  mode: 'lines+markers', name: 'Total OT %', line: { color: '#e67e22', width: 2, dash: 'dash' }, marker: { size: 5 } },
+  ]);
+
+  // Leave
+  lineTrend('chartLeaveTrend', 'Leave', labels, [
+    { x: labels, y: monthData.map(r => r.leave_pct), mode: 'lines+markers', name: 'Leave %', line: { color: '#9b59b6', width: 2 }, marker: { size: 5 } },
+  ]);
+
+  // Missing
+  lineTrend('chartMissingTrend', 'Missing', labels, [
+    { x: labels, y: monthData.map(r => r.missing_pct), mode: 'lines+markers', name: 'Missing Hrs %', line: { color: '#f1c40f', width: 2 }, marker: { size: 5 } },
+  ]);
+}
+
+// ────────────────────────────────────────────────────────────────────────────
+// Render department bar charts
+// ────────────────────────────────────────────────────────────────────────────
+function renderDeptBars(depts) {
+  const names  = depts.map(d => d.department);
+  const colors = names.map(n => deptColor(n));
+  const barLayout = { ...PLOTLY_LAYOUT, xaxis: { ...PLOTLY_LAYOUT.xaxis, tickangle: -30 }, margin: { t: 20, b: 80, l: 50, r: 10 } };
+  const bar = (y, color, name) => ({ x: names, y: y, type: 'bar', name: name, marker: { color: colors }, showlegend: false });
+
+  Plotly.newPlot('chartDeptAtt',  [bar(depts.map(d=>d.att_pct),   '#2ecc71', 'Att %')],   barLayout, PLOTLY_CONFIG);
+  Plotly.newPlot('chartDeptAbs',  [bar(depts.map(d=>d.abs_pct),   '#e74c3c', 'Abs %')],   barLayout, PLOTLY_CONFIG);
+  Plotly.newPlot('chartDeptOT',   [bar(depts.map(d=>d.total_ot_pct),'#f39c12','OT %')],  barLayout, PLOTLY_CONFIG);
+  Plotly.newPlot('chartDeptMiss', [bar(depts.map(d=>d.missing_pct),'#f1c40f','Miss %')], barLayout, PLOTLY_CONFIG);
+}
+
+// ────────────────────────────────────────────────────────────────────────────
+// Correlation scatter
+// ────────────────────────────────────────────────────────────────────────────
+function renderCorrelation(depts) {
+  const trace = {
+    x: depts.map(d => d.abs_pct),
+    y: depts.map(d => d.total_ot_pct),
+    mode: 'markers+text',
+    type: 'scatter',
+    text: depts.map(d => d.department),
+    textposition: 'top center',
+    marker: { size: 14, color: depts.map(d => deptColor(d.department)), opacity: 0.9 },
+    name: 'Departments',
+  };
+  const layout = {
+    ...PLOTLY_LAYOUT,
+    xaxis: { ...PLOTLY_LAYOUT.xaxis, title: 'Absenteeism %' },
+    yaxis: { ...PLOTLY_LAYOUT.yaxis, title: 'Total OT %' },
+  };
+  Plotly.newPlot('chartCorrelation', [trace], layout, PLOTLY_CONFIG);
+}
+
+// ────────────────────────────────────────────────────────────────────────────
+// OT breakdown table + top-5 charts
+// ────────────────────────────────────────────────────────────────────────────
+function renderOTBreakdown(depts) {
+  const sorted = [...depts].sort((a,b) => b.total_ot_pct - a.total_ot_pct);
+  document.getElementById('otBreakdownBody').innerHTML = sorted.map((d,i) => `
+    <tr>
+      <td>${i+1}</td><td>${d.department}</td>
+      <td>${d.ot1_pct}%</td><td>${d.ot2_pct}%</td><td>${d.ot3_pct}%</td>
+      <td><strong>${d.total_ot_pct}%</strong></td>
+      <td>${d.ot1_hours}</td><td>${d.ot2_hours}</td><td>${d.ot3_hours}</td>
+      <td><strong>${d.total_ot_hours}</strong></td>
+    </tr>`).join('');
+
+  const hBar = (divId, vals, names, title) => {
+    Plotly.newPlot(divId, [{
+      y: names, x: vals, type: 'bar', orientation: 'h',
+      marker: { color: names.map(n => deptColor(n)) },
+    }], { ...PLOTLY_LAYOUT, title: { text: title, font: { size: 11 } }, margin: { t: 30, b: 30, l: 110, r: 20 } }, PLOTLY_CONFIG);
+  };
+
+  const top5 = f => [...depts].sort((a,b)=>b[f]-a[f]).slice(0,5);
+
+  const t1 = top5('ot1_pct'); hBar('chartTopOT1', t1.map(d=>d.ot1_pct),   t1.map(d=>d.department), 'OT1 %');
+  const t2 = top5('ot2_pct'); hBar('chartTopOT2', t2.map(d=>d.ot2_pct),   t2.map(d=>d.department), 'OT2 %');
+  const t3 = top5('ot3_pct'); hBar('chartTopOT3', t3.map(d=>d.ot3_pct),   t3.map(d=>d.department), 'OT3 %');
+}
+
+// ────────────────────────────────────────────────────────────────────────────
+// Heat maps (department × month)
+// ────────────────────────────────────────────────────────────────────────────
+function renderHeatmaps(moDeptData) {
+  const depts  = [...new Set(moDeptData.map(r=>r.department))].sort();
+  const months = [...new Set(moDeptData.map(r=>r.month_year))].sort();
+
+  function buildMatrix(field) {
+    return depts.map(d => months.map(my => {
+      const row = moDeptData.find(r => r.department === d && r.month_year === my);
+      return row ? row[field] : null;
+    }));
+  }
+
+  const heatLayout = {
+    ...PLOTLY_LAYOUT,
+    xaxis: { ...PLOTLY_LAYOUT.xaxis, tickangle: -45 },
+    yaxis: { ...PLOTLY_LAYOUT.yaxis, autorange: 'reversed' },
+    margin: { t: 20, b: 80, l: 120, r: 20 },
+  };
+
+  const heat = (divId, z, colorscale, title) => Plotly.newPlot(divId, [{
+    z: z, x: months, y: depts, type: 'heatmap',
+    colorscale: colorscale, showscale: true,
+    colorbar: { thickness: 12, len: 0.8, tickfont: { size: 9, color: '#c9d1d9' } },
+    text: z.map(row => row.map(v => v !== null ? v+'%' : '')),
+    hovertemplate: '%{y} | %{x}<br>Value: %{z}%<extra></extra>',
+  }], heatLayout, PLOTLY_CONFIG);
+
+  heat('heatAtt',  buildMatrix('att_pct'),     [[0,'#c0392b'],[0.5,'#f39c12'],[1,'#27ae60']], '');
+  heat('heatAbs',  buildMatrix('abs_pct'),     [[0,'#27ae60'],[0.5,'#f39c12'],[1,'#c0392b']], '');
+  heat('heatMiss', buildMatrix('missing_pct'), [[0,'#27ae60'],[0.5,'#f39c12'],[1,'#c0392b']], '');
+  heat('heatOT',   buildMatrix('total_ot_pct'),[[0,'#27ae60'],[0.5,'#f39c12'],[1,'#e74c3c']], '');
+}
+
+// ────────────────────────────────────────────────────────────────────────────
+// Scorecard
+// ────────────────────────────────────────────────────────────────────────────
+function renderScorecard(depts) {
+  // Score: weighted (Att↑ + Abs↓ + OT↓ + Miss↓ + Leave↓)
+  const scored = depts.map(d => ({
+    ...d,
+    score: parseFloat((d.att_pct - d.abs_pct*0.5 - d.total_ot_pct*0.3 - d.missing_pct*0.5 - d.leave_pct*0.3).toFixed(2))
+  })).sort((a,b)=>b.score-a.score);
+
+  document.getElementById('scorecardBody').innerHTML = scored.map((d,i) => `
+    <tr>
+      <td><strong>${i+1}</strong></td>
+      <td>${d.department}</td>
+      <td>${d.headcount}</td>
+      <td class="${lightClass(d.att_pct,'att')}">${d.att_pct}%</td>
+      <td class="${lightClass(d.abs_pct,'abs')}">${d.abs_pct}%</td>
+      <td>${d.leave_pct}%</td><td>${d.missing_pct}%</td>
+      <td class="${lightClass(d.total_ot_pct,'ot')}">${d.total_ot_pct}%</td>
+      <td><strong>${d.score}</strong></td>
+    </tr>`).join('');
+}
+
+// ────────────────────────────────────────────────────────────────────────────
+// Department ranking lists
+// ────────────────────────────────────────────────────────────────────────────
+function renderRankings(attTop, absTop, otTop, missTop) {
+  function makeList(containerId, items, field, unit, ascending) {
+    document.getElementById(containerId).innerHTML = items.map((d,i) => {
+      const color = i===0?'#f39c12':i===1?'#8a8a8a':i===2?'#cd7f32':'#4a9eff';
+      return `<div class="rank-item">
+        <span class="rank-num" style="color:${color}">${i+1}</span>
+        <span class="rank-dept">${d.department}</span>
+        <span class="rank-val">${d[field]}${unit}</span>
+      </div>`;
+    }).join('');
+  }
+  makeList('rankingAttBody',  attTop,  'att_pct',      '%');
+  makeList('rankingAbsBody',  absTop,  'abs_pct',      '%');
+  makeList('rankingOTBody',   otTop,   'total_ot_pct', '%');
+  makeList('rankingMissBody', missTop, 'missing_pct',  '%');
+}
+
+// ────────────────────────────────────────────────────────────────────────────
+// Employee top-10 tables
+// ────────────────────────────────────────────────────────────────────────────
+function renderTopEmployees(topOT, topMiss, topAbs) {
+  const rows = (data, cells) => data.map((e,i) => `<tr><td>${i+1}</td>${cells(e)}</tr>`).join('');
+
+  document.getElementById('topOTBody').innerHTML  = rows(topOT,  e=>`<td>${e.id_card}</td><td>${e.department}</td><td>${e.total_ot_hours}</td><td>${e.total_ot_pct}%</td>`);
+  document.getElementById('topMissBody').innerHTML= rows(topMiss,e=>`<td>${e.id_card}</td><td>${e.department}</td><td>${e.missing_hours}</td><td>${e.missing_pct}%</td>`);
+  document.getElementById('topAbsBody').innerHTML = rows(topAbs, e=>`<td>${e.id_card}</td><td>${e.department}</td><td>${e.abs_pct}%</td>`);
+}
+
+// ────────────────────────────────────────────────────────────────────────────
+// Leave analysis
+// ────────────────────────────────────────────────────────────────────────────
+function renderLeave(leaveData) {
+  // Aggregate by leave type
+  const byType = {};
+  leaveData.forEach(r => {
+    byType[r.leave_type] = (byType[r.leave_type] || 0) + r.total_leave_days;
+  });
+  const ltypes = Object.keys(byType);
+  const lvals  = ltypes.map(k => byType[k]);
+
+  Plotly.newPlot('chartLeaveByType', [{
+    labels: ltypes, values: lvals, type: 'pie',
+    marker: { colors: ['#4a9eff','#f39c12','#2ecc71','#e74c3c','#9b59b6'] },
+    textinfo: 'label+percent',
+    hole: 0.4,
+  }], { ...PLOTLY_LAYOUT, margin: { t: 20, b: 20, l: 20, r: 20 } }, PLOTLY_CONFIG);
+
+  // Aggregate by department
+  const byDept = {};
+  leaveData.forEach(r => {
+    byDept[r.department] = (byDept[r.department] || 0) + r.total_leave_days;
+  });
+  const dnames = Object.keys(byDept);
+  const dvals  = dnames.map(k => byDept[k]);
+  Plotly.newPlot('chartLeaveByDept', [{
+    x: dnames, y: dvals, type: 'bar',
+    marker: { color: dnames.map(n => deptColor(n)) },
+  }], { ...PLOTLY_LAYOUT, xaxis: { ...PLOTLY_LAYOUT.xaxis, tickangle: -30 }, margin: { t: 20, b: 80, l: 50, r: 10 } }, PLOTLY_CONFIG);
+
+  // Table
+  document.getElementById('leaveTableBody').innerHTML = leaveData
+    .sort((a,b)=>b.total_leave_days-a.total_leave_days)
+    .slice(0,50)
+    .map(r=>`<tr><td>${r.leave_type}</td><td>${r.department}</td><td>${r.total_leave_days}</td><td>${r.employees}</td></tr>`)
+    .join('');
+}
+
+// ────────────────────────────────────────────────────────────────────────────
+// Manpower risk
+// ────────────────────────────────────────────────────────────────────────────
+function renderRisks(risks) {
+  const fillList = (id, items, textFn, emptyMsg) => {
+    const ul = document.getElementById(id);
+    ul.innerHTML = items.length
+      ? items.map(i=>`<li>${textFn(i)}</li>`).join('')
+      : `<li class="text-muted">${emptyMsg}</li>`;
+  };
+  fillList('riskIncAbs',       risks.increasing_absenteeism,    r=>`${r.department} <span class="badge bg-danger">+${r.slope}%/mo</span>`,  'No issues detected');
+  fillList('riskIncOT',        risks.increasing_ot,             r=>`${r.department} <span class="badge bg-warning text-dark">+${r.slope}%/mo</span>`, 'No issues detected');
+  fillList('riskLowAtt',       risks.low_attendance_consecutive,r=>`${r.department} <span class="badge bg-danger">${r.months} months</span>`, 'No issues detected');
+  fillList('riskExcLeave',     risks.excessive_leave,           r=>`${r.department} <span class="badge bg-warning text-dark">${r.leave_pct}%</span>`, 'No issues detected');
+  fillList('riskMissHrs',      risks.high_missing_hours,        r=>`${r.department} <span class="badge bg-warning text-dark">${r.missing_pct}%</span>`, 'No issues detected');
+  fillList('riskIntervention', risks.intervention_needed,       r=>`${r.department} <span class="badge bg-danger">${r.risk_count} risk factors</span>`, 'No departments flagged');
+}
+
+// ────────────────────────────────────────────────────────────────────────────
+// Exception tables
+// ────────────────────────────────────────────────────────────────────────────
+function renderExceptions(exc) {
+  const tbl = (id, rows, cellsFn) => {
+    document.getElementById(id).innerHTML = rows.slice(0,50).map((r,i)=>`<tr><td>${i+1}</td>${cellsFn(r)}</tr>`).join('');
+  };
+  tbl('excAbsBody',     exc.excessive_absenteeism, r=>`<td>${r.id_card}</td><td>${r.department}</td><td class="text-danger">${r.abs_pct}%</td>`);
+  tbl('excOTBody',      exc.excessive_ot,          r=>`<td>${r.id_card}</td><td>${r.department}</td><td>${r.total_ot_pct}%</td><td>${r.total_ot_hours}</td>`);
+  tbl('excMissBody',    exc.excessive_missing,      r=>`<td>${r.id_card}</td><td>${r.department}</td><td>${r.missing_pct}%</td><td>${r.missing_hours}</td>`);
+  tbl('excNoLeaveBody', exc.no_leave,               r=>`<td>${r.id_card}</td><td>${r.department}</td>`);
+  tbl('excConsecBody',  exc.consecutive_absences,   r=>`<td>${r.id_card}</td><td>${r.department}</td><td class="text-danger">${r.max_consecutive} days</td>`);
+}
+
+// ────────────────────────────────────────────────────────────────────────────
+// Forecasting charts
+// ────────────────────────────────────────────────────────────────────────────
+function renderForecasts(forecasts) {
+  const fields = [
+    ['att_pct',      'chartForecastAtt',  'Attendance % – Forecast',  '#2ecc71'],
+    ['abs_pct',      'chartForecastAbs',  'Absenteeism % – Forecast', '#e74c3c'],
+    ['total_ot_pct', 'chartForecastOT',   'OT % – Forecast',          '#f39c12'],
+    ['missing_pct',  'chartForecastMiss', 'Missing Hrs % – Forecast', '#f1c40f'],
+  ];
+  fields.forEach(([key, divId, title, color]) => {
+    const f = forecasts[key];
+    if (!f) return;
+    const allLabels = [...f.labels, ...f.future_labels];
+    const allVals   = [...f.historical, ...Array(f.future_labels.length).fill(null)];
+    const futureVals = [...Array(f.historical.length).fill(null), ...f.future_vals];
+    Plotly.newPlot(divId, [
+      { x: allLabels, y: allVals,   mode:'lines+markers', name:'Historical', line:{ color:color, width:2 }, marker:{ size:5 } },
+      { x: allLabels, y: futureVals, mode:'lines+markers', name:'Forecast',  line:{ color:color, width:2, dash:'dash' }, marker:{ size:5, symbol:'diamond' } },
+      { x: [f.labels[f.labels.length-1], f.future_labels[0]], y: [f.historical[f.historical.length-1], f.future_vals[0]], mode:'lines', line:{ color:color, width:1, dash:'dot' }, showlegend:false },
+    ], { ...PLOTLY_LAYOUT, title:{ text: title, font:{ size:12 } } }, PLOTLY_CONFIG);
+  });
+}
+
+// ────────────────────────────────────────────────────────────────────────────
+// Management insights
+// ────────────────────────────────────────────────────────────────────────────
+function renderInsights(data) {
+  const insights = [];
+  const kpis = data.kpis;
+
+  if (kpis.att_pct?.value < 90)
+    insights.push({ icon:'bi-exclamation-triangle', color:'danger', title:'Low Overall Attendance', text:`Overall attendance stands at ${kpis.att_pct.value}%. Immediate management attention required to improve workforce presence.` });
+  if (kpis.abs_pct?.value > 10)
+    insights.push({ icon:'bi-person-x', color:'danger', title:'High Absenteeism Rate', text:`Absenteeism at ${kpis.abs_pct.value}% exceeds the 10% threshold. Review root causes and consider wellness interventions.` });
+  if (kpis.total_ot_pct?.value > 15)
+    insights.push({ icon:'bi-clock-history', color:'warning', title:'Excessive Overtime', text:`Overtime at ${kpis.total_ot_pct.value}% suggests potential understaffing or workload imbalance. Consider hiring or redistribution.` });
+  if (data.risks?.intervention_needed?.length > 0)
+    insights.push({ icon:'bi-building-exclamation', color:'danger', title:'Departments Require Immediate Intervention', text:`${data.risks.intervention_needed.map(r=>r.department).join(', ')} have multiple risk factors and require management attention.` });
+  if (data.forecasts?.abs_pct?.trend === 'increasing')
+    insights.push({ icon:'bi-arrow-up-right', color:'warning', title:'Absenteeism Trending Upward', text:`Forecasting model indicates absenteeism will continue rising. Proactive action recommended.` });
+  if (insights.length === 0)
+    insights.push({ icon:'bi-check-circle', color:'success', title:'All KPIs Within Acceptable Range', text:'Current workforce metrics are performing within acceptable thresholds. Continue monitoring regularly.' });
+
+  document.getElementById('insightsList').innerHTML = insights.map(ins => `
+    <div class="col-md-6 col-lg-4">
+      <div class="insight-card insight-${ins.color}">
+        <i class="bi ${ins.icon} insight-icon text-${ins.color}"></i>
+        <div><div class="insight-title">${ins.title}</div><div class="insight-text">${ins.text}</div></div>
+      </div>
+    </div>`).join('');
+}
+
+// ────────────────────────────────────────────────────────────────────────────
+// Exception tab switching
+// ────────────────────────────────────────────────────────────────────────────
+document.getElementById('exceptionTabs').addEventListener('click', e => {
+  e.preventDefault();
+  const link = e.target.closest('[data-tab]');
+  if (!link) return;
+  document.querySelectorAll('.exception-panel').forEach(p => p.style.display='none');
+  document.querySelectorAll('#exceptionTabs .nav-link').forEach(l => l.classList.remove('active'));
+  document.getElementById(link.dataset.tab).style.display='block';
+  link.classList.add('active');
+});
+
+// ────────────────────────────────────────────────────────────────────────────
+// Main data load function
+// ────────────────────────────────────────────────────────────────────────────
+async function loadData() {
+  const overlay = document.getElementById('loadingOverlay');
+  overlay.style.display = 'flex';
+  try {
+    const params = getFilterParams();
+    const resp = await fetch('/api/dashboard?' + params.toString());
+    const data = await resp.json();
+    if (data.error) { alert(data.error); return; }
+
+    document.getElementById('bestDept').textContent  = data.best_dept || '—';
+    document.getElementById('worstDept').textContent = data.worst_dept || '—';
+
+    renderKPIs(data.kpis);
+    renderMonthlySummary(data.month_data);
+    renderTrends(data.month_data);
+    renderDeptBars(data.dept_metrics);
+    renderCorrelation(data.dept_metrics);
+    renderOTBreakdown(data.dept_metrics);
+    renderHeatmaps(data.mo_dept_data);
+    renderScorecard(data.dept_metrics);
+    renderRankings(data.dept_rank_att, data.dept_rank_abs, data.dept_rank_ot, data.dept_rank_miss);
+    renderTopEmployees(data.top_ot, data.top_miss, data.top_abs);
+    renderLeave(data.leave_data);
+    renderRisks(data.risks);
+    renderExceptions(data.exceptions);
+    renderForecasts(data.forecasts);
+    renderInsights(data);
+  } catch(err) {
+    console.error(err);
+    alert('Failed to load dashboard data: ' + err.message);
+  } finally {
+    overlay.style.display = 'none';
+  }
+}
+
+// Bind apply / clear / refresh
+['btnApplyFilters','btnApplyFilters2'].forEach(id => {
+  document.getElementById(id)?.addEventListener('click', loadData);
+});
+document.getElementById('btnClearFilters')?.addEventListener('click', () => {
+  ['fDept','fYear','fMonth','fEmployee','fLeaveType'].forEach(id => {
+    const el = document.getElementById(id);
+    if (el && el._choices) el._choices.removeActiveItems();
+    else if (el) Array.from(el.options).forEach(o => o.selected = false);
+  });
+  document.getElementById('fDateFrom').value = '';
+  document.getElementById('fDateTo').value   = '';
+  loadData();
+});
+document.getElementById('btnRefresh')?.addEventListener('click', loadData);
+
+// Initial load
+loadData();
+</script>
+{% endblock %}

@@ -1,0 +1,496 @@
+{% extends "base.html" %}
+{% block title %}Drill-Down Analytics – Sabrina{% endblock %}
+
+{% block content %}
+<div class="container-fluid px-4 py-3">
+
+  <!-- ── Page header ─────────────────────────────────────────────────── -->
+  <div class="d-flex align-items-center justify-content-between mb-3">
+    <div>
+      <h4 class="page-title mb-0"><i class="bi bi-diagram-3 me-2 text-accent"></i>Attendance Analytics – Drill-Down</h4>
+      <p class="text-muted small mb-0">Monthly OT %, Leave %, Missing Hours %, Attendance % by Department with Employee-Level Detail</p>
+    </div>
+    <div class="d-flex gap-2">
+      <button class="btn btn-sm btn-outline-secondary" id="btnRefresh" title="Refresh">
+        <i class="bi bi-arrow-clockwise"></i>
+      </button>
+      <button class="btn btn-sm btn-accent" id="btnApplyFilters">
+        <i class="bi bi-funnel me-1"></i>Apply Filters
+      </button>
+    </div>
+  </div>
+
+  <!-- ── Filter Panel ─────────────────────────────────────────────────── -->
+  <div class="filter-panel mb-4">
+    <div class="filter-panel-header" data-bs-toggle="collapse" data-bs-target="#filterBody2">
+      <i class="bi bi-sliders me-2 text-accent"></i><strong>Filters</strong>
+      <i class="bi bi-chevron-down ms-auto toggle-icon"></i>
+    </div>
+    <div class="collapse show" id="filterBody2">
+      <div class="filter-panel-body">
+        <div class="row g-3">
+          <div class="col-md-3 col-sm-6">
+            <label class="filter-label">Department</label>
+            <select id="fDept" multiple class="filter-select">
+              {% for d in filters_meta.departments %}
+              <option value="{{ d }}">{{ d }}</option>
+              {% endfor %}
+            </select>
+          </div>
+          <div class="col-md-2 col-sm-6">
+            <label class="filter-label">Year</label>
+            <select id="fYear" multiple class="filter-select">
+              {% for y in filters_meta.years %}
+              <option value="{{ y }}">{{ y }}</option>
+              {% endfor %}
+            </select>
+          </div>
+          <div class="col-md-2 col-sm-6">
+            <label class="filter-label">Month</label>
+            <select id="fMonth" multiple class="filter-select">
+              {% for m in filters_meta.months %}
+              <option value="{{ m }}">{{ ["","Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"][m] }}</option>
+              {% endfor %}
+            </select>
+          </div>
+          <div class="col-md-3 col-sm-6">
+            <label class="filter-label">Employee (ID Card)</label>
+            <select id="fEmployee" multiple class="filter-select">
+              {% for e in filters_meta.id_cards %}
+              <option value="{{ e }}">{{ e }}</option>
+              {% endfor %}
+            </select>
+          </div>
+          <div class="col-md-2 col-sm-6">
+            <label class="filter-label">Leave Type</label>
+            <select id="fLeaveType" multiple class="filter-select">
+              {% for lt in filters_meta.leave_types %}
+              <option value="{{ lt }}">{{ lt }}</option>
+              {% endfor %}
+            </select>
+          </div>
+          <div class="col-md-3 col-sm-6">
+            <label class="filter-label">Date From</label>
+            <input type="date" id="fDateFrom" class="form-control filter-input" />
+          </div>
+          <div class="col-md-3 col-sm-6">
+            <label class="filter-label">Date To</label>
+            <input type="date" id="fDateTo" class="form-control filter-input" />
+          </div>
+          <div class="col-md-6 col-sm-12 d-flex align-items-end gap-2">
+            <button class="btn btn-accent" id="btnApply2"><i class="bi bi-funnel me-1"></i>Apply</button>
+            <button class="btn btn-outline-secondary" id="btnClear"><i class="bi bi-x-circle me-1"></i>Clear</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── Attendance Analytics – Department Monthly Table ───────────────── -->
+  <div class="section-card mb-4">
+    <div class="section-header"><i class="bi bi-table me-2 text-accent"></i>Monthly Attendance Analytics by Department</div>
+    <div class="table-responsive">
+      <table class="data-table" id="deptMonthlyTable">
+        <thead>
+          <tr>
+            <th>Department</th><th>Month</th><th>Year</th><th>Headcount</th>
+            <th>Attendance %</th><th>Absenteeism %</th><th>Leave %</th>
+            <th>Missing Hrs %</th><th>OT1 %</th><th>OT2 %</th><th>OT3 %</th><th>Total OT %</th>
+          </tr>
+        </thead>
+        <tbody id="deptMonthlyBody"></tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- ── Department-Level Charts ────────────────────────────────────────── -->
+  <div class="row g-3 mb-4">
+    <div class="col-lg-6">
+      <div class="section-card h-100">
+        <div class="section-header"><i class="bi bi-graph-up me-2 text-accent"></i>Monthly Attendance % by Department</div>
+        <div id="chartDeptAttMonthly" class="chart-container"></div>
+      </div>
+    </div>
+    <div class="col-lg-6">
+      <div class="section-card h-100">
+        <div class="section-header"><i class="bi bi-graph-up me-2 text-accent"></i>Monthly Absenteeism % by Department</div>
+        <div id="chartDeptAbsMonthly" class="chart-container"></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="row g-3 mb-4">
+    <div class="col-lg-6">
+      <div class="section-card h-100">
+        <div class="section-header"><i class="bi bi-graph-up me-2 text-accent"></i>Monthly OT % by Department</div>
+        <div id="chartDeptOTMonthly" class="chart-container"></div>
+      </div>
+    </div>
+    <div class="col-lg-6">
+      <div class="section-card h-100">
+        <div class="section-header"><i class="bi bi-graph-up me-2 text-accent"></i>Monthly Missing Hours % by Department</div>
+        <div id="chartDeptMissMonthly" class="chart-container"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── OT Breakdown by Type and Dept (Matrix) ────────────────────────── -->
+  <div class="section-card mb-4">
+    <div class="section-header"><i class="bi bi-grid me-2 text-accent"></i>OT Breakdown Matrix – OT1 / OT2 / OT3 by Department</div>
+    <div class="row g-3 mb-2">
+      <div class="col-lg-4"><div id="chartOT1Dept" class="chart-container"></div></div>
+      <div class="col-lg-4"><div id="chartOT2Dept" class="chart-container"></div></div>
+      <div class="col-lg-4"><div id="chartOT3Dept" class="chart-container"></div></div>
+    </div>
+    <div class="table-responsive">
+      <table class="data-table" id="otMatrixTable">
+        <thead>
+          <tr>
+            <th>Department</th><th>OT1 %</th><th>OT2 %</th><th>OT3 %</th><th>Total OT %</th>
+            <th>OT1 Hrs</th><th>OT2 Hrs</th><th>OT3 Hrs</th>
+          </tr>
+        </thead>
+        <tbody id="otMatrixBody"></tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- ── OT Monthly Trend per Department ───────────────────────────────── -->
+  <div class="section-card mb-4">
+    <div class="section-header"><i class="bi bi-graph-up me-2 text-accent"></i>Monthly OT Trend by Department</div>
+    <div id="chartOTMonthlyDept" class="chart-container" style="height:380px;"></div>
+  </div>
+
+  <!-- ── Department Ranking (OT) Matrix ────────────────────────────────── -->
+  <div class="section-card mb-4">
+    <div class="section-header"><i class="bi bi-bar-chart-steps me-2 text-accent"></i>Department OT Ranking Matrix (Month × Department)</div>
+    <div id="chartOTRankMatrix" class="chart-container" style="height:350px;"></div>
+  </div>
+
+  <!-- ── Employee-Level Analysis ───────────────────────────────────────── -->
+  <div class="section-card mb-4">
+    <div class="section-header"><i class="bi bi-person-lines-fill me-2 text-accent"></i>Employee-Level Analysis</div>
+    <div class="table-responsive">
+      <table class="data-table" id="empTable">
+        <thead>
+          <tr>
+            <th>ID Card</th><th>Department</th><th>Headcount Days</th>
+            <th>Attendance %</th><th>Absenteeism %</th><th>Leave %</th>
+            <th>Missing Hrs %</th><th>OT %</th><th>OT1 Hrs</th><th>OT2 Hrs</th><th>OT3 Hrs</th>
+          </tr>
+        </thead>
+        <tbody id="empTableBody"></tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- ── Leave Analysis (type × dept) ──────────────────────────────────── -->
+  <div class="section-card mb-4">
+    <div class="section-header"><i class="bi bi-calendar-minus me-2 text-accent"></i>Leave Utilisation by Type &amp; Department</div>
+    <div class="row g-3">
+      <div class="col-lg-5">
+        <div id="chartLeaveHeatmap" class="chart-container"></div>
+      </div>
+      <div class="col-lg-7">
+        <div class="table-responsive">
+          <table class="data-table">
+            <thead><tr><th>Leave Type</th><th>Department</th><th>Total Days</th><th>Employees</th></tr></thead>
+            <tbody id="leaveTableBody"></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── Exception Reports ──────────────────────────────────────────────── -->
+  <div class="section-card mb-4">
+    <div class="section-header"><i class="bi bi-flag me-2 text-warning"></i>Exception Reports</div>
+    <ul class="nav nav-tabs exception-tabs mb-3" id="excTabs2">
+      <li class="nav-item"><a class="nav-link active" data-tab2="exc2-abs" href="#">Excessive Absenteeism</a></li>
+      <li class="nav-item"><a class="nav-link" data-tab2="exc2-ot" href="#">Excessive OT</a></li>
+      <li class="nav-item"><a class="nav-link" data-tab2="exc2-miss" href="#">Excessive Missing Hrs</a></li>
+      <li class="nav-item"><a class="nav-link" data-tab2="exc2-consec" href="#">3+ Consecutive Absences</a></li>
+    </ul>
+    <div id="exc2-abs" class="exception-panel active table-responsive">
+      <table class="data-table"><thead><tr><th>#</th><th>ID Card</th><th>Department</th><th>Absenteeism %</th></tr></thead>
+      <tbody id="ex2AbsBody"></tbody></table>
+    </div>
+    <div id="exc2-ot" class="exception-panel table-responsive" style="display:none">
+      <table class="data-table"><thead><tr><th>#</th><th>ID Card</th><th>Department</th><th>OT %</th><th>OT Hrs</th></tr></thead>
+      <tbody id="ex2OTBody"></tbody></table>
+    </div>
+    <div id="exc2-miss" class="exception-panel table-responsive" style="display:none">
+      <table class="data-table"><thead><tr><th>#</th><th>ID Card</th><th>Department</th><th>Missing %</th><th>Missing Hrs</th></tr></thead>
+      <tbody id="ex2MissBody"></tbody></table>
+    </div>
+    <div id="exc2-consec" class="exception-panel table-responsive" style="display:none">
+      <table class="data-table"><thead><tr><th>#</th><th>ID Card</th><th>Department</th><th>Max Consecutive Absences</th></tr></thead>
+      <tbody id="ex2ConsecBody"></tbody></table>
+    </div>
+  </div>
+
+  <!-- ── Recurring Patterns ─────────────────────────────────────────────── -->
+  <div class="row g-3 mb-4">
+    <div class="col-lg-6">
+      <div class="section-card h-100">
+        <div class="section-header"><i class="bi bi-arrow-repeat me-2 text-danger"></i>Recurring Absenteeism Patterns</div>
+        <div class="table-responsive">
+          <table class="data-table">
+            <thead><tr><th>#</th><th>ID Card</th><th>Department</th><th>Months with Absences</th></tr></thead>
+            <tbody id="recurAbsBody"></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+    <div class="col-lg-6">
+      <div class="section-card h-100">
+        <div class="section-header"><i class="bi bi-arrow-repeat me-2 text-warning"></i>Recurring Missing Hours Patterns</div>
+        <div class="table-responsive">
+          <table class="data-table">
+            <thead><tr><th>#</th><th>ID Card</th><th>Department</th><th>Months with Missing Hrs</th></tr></thead>
+            <tbody id="recurMissBody"></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  </div>
+
+</div><!-- /container-fluid -->
+
+<div id="loadingOverlay" class="loading-overlay" style="display:none">
+  <div class="spinner-border text-accent" role="status" style="width:3rem;height:3rem;"></div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+const PLOTLY_LAYOUT = {
+  paper_bgcolor: 'rgba(0,0,0,0)', plot_bgcolor: 'rgba(0,0,0,0)',
+  font: { color: '#c9d1d9', size: 11 },
+  margin: { t: 30, b: 50, l: 50, r: 20 },
+  xaxis: { gridcolor: '#21262d', zerolinecolor: '#21262d' },
+  yaxis: { gridcolor: '#21262d', zerolinecolor: '#21262d' },
+  legend: { bgcolor: 'rgba(0,0,0,0)', font: { size: 10 } },
+};
+const PLOTLY_CONFIG = { responsive: true, displayModeBar: false };
+const DEPT_COLORS = {
+  'Dyeing':'#4a9eff','Knitting':'#f39c12','Finishing':'#2ecc71','Quality Control':'#e74c3c',
+  'Maintenance':'#9b59b6','Administration':'#1abc9c','Human Resources':'#e67e22',
+  'Finance':'#3498db','Logistics':'#f1c40f','Production':'#e91e63'
+};
+const deptColor = d => DEPT_COLORS[d] || '#4a9eff';
+
+const choicesOpts = {
+  removeItemButton: true, searchEnabled: true,
+  placeholder: true, placeholderValue: 'All', itemSelectText: '',
+  classNames: { containerOuter: 'choices dark-choices' },
+};
+['fDept','fYear','fMonth','fEmployee','fLeaveType'].forEach(id => {
+  const el = document.getElementById(id);
+  if (el) new Choices(el, choicesOpts);
+});
+
+function getFilterParams() {
+  const params = new URLSearchParams();
+  const getMulti = id => Array.from((document.getElementById(id)||{selectedOptions:[]}).selectedOptions).map(o=>o.value);
+  getMulti('fDept').forEach(v=>params.append('departments',v));
+  getMulti('fYear').forEach(v=>params.append('years',v));
+  getMulti('fMonth').forEach(v=>params.append('months',v));
+  getMulti('fEmployee').forEach(v=>params.append('id_cards',v));
+  getMulti('fLeaveType').forEach(v=>params.append('leave_types',v));
+  const df=document.getElementById('fDateFrom').value;
+  const dt=document.getElementById('fDateTo').value;
+  if(df) params.set('date_from',df);
+  if(dt) params.set('date_to',dt);
+  return params;
+}
+
+function lightClass(val,type){
+  if(type==='att') return val>=95?'text-success':val>=85?'text-warning':'text-danger';
+  if(type==='abs') return val<=5?'text-success':val<=15?'text-warning':'text-danger';
+  if(type==='ot')  return val<=10?'text-success':val<=20?'text-warning':'text-danger';
+  return '';
+}
+
+function renderDeptMonthlyTable(moDept) {
+  document.getElementById('deptMonthlyBody').innerHTML = moDept.map(r=>`
+    <tr>
+      <td>${r.department}</td><td>${r.month_name}</td><td>${r.year}</td><td>${r.headcount}</td>
+      <td class="${lightClass(r.att_pct,'att')}">${r.att_pct}%</td>
+      <td class="${lightClass(r.abs_pct,'abs')}">${r.abs_pct}%</td>
+      <td>${r.leave_pct}%</td><td>${r.missing_pct}%</td>
+      <td>${r.ot1_pct}%</td><td>${r.ot2_pct}%</td><td>${r.ot3_pct}%</td>
+      <td class="${lightClass(r.total_ot_pct,'ot')}">${r.total_ot_pct}%</td>
+    </tr>`).join('');
+}
+
+function renderDeptMonthlyCharts(moDept) {
+  const depts  = [...new Set(moDept.map(r=>r.department))].sort();
+  const months = [...new Set(moDept.map(r=>r.month_year))].sort();
+
+  const makeLines = (divId, field) => {
+    const traces = depts.map(d => ({
+      x: months,
+      y: months.map(my => { const r=moDept.find(r=>r.department===d&&r.month_year===my); return r?r[field]:null; }),
+      mode: 'lines+markers', name: d,
+      line: { color: deptColor(d), width: 2 }, marker: { size: 5 },
+    }));
+    Plotly.newPlot(divId, traces, {
+      ...PLOTLY_LAYOUT,
+      xaxis: { ...PLOTLY_LAYOUT.xaxis, tickangle: -30 },
+    }, PLOTLY_CONFIG);
+  };
+
+  makeLines('chartDeptAttMonthly',  'att_pct');
+  makeLines('chartDeptAbsMonthly',  'abs_pct');
+  makeLines('chartDeptOTMonthly',   'total_ot_pct');
+  makeLines('chartDeptMissMonthly', 'missing_pct');
+
+  // OT Monthly Trend (grouped)
+  const otTraces = depts.map(d => ({
+    x: months,
+    y: months.map(my => { const r=moDept.find(r=>r.department===d&&r.month_year===my); return r?r.total_ot_pct:null; }),
+    mode: 'lines+markers', name: d,
+    line: { color: deptColor(d), width: 2 }, marker: { size: 5 },
+  }));
+  Plotly.newPlot('chartOTMonthlyDept', otTraces, {
+    ...PLOTLY_LAYOUT, height: 380,
+    xaxis: { ...PLOTLY_LAYOUT.xaxis, tickangle: -30 },
+    legend: { orientation: 'h', y: -0.3 },
+  }, PLOTLY_CONFIG);
+
+  // OT Rank Matrix (heatmap)
+  const z = depts.map(d => months.map(my => {
+    const r = moDept.find(r=>r.department===d&&r.month_year===my);
+    return r ? r.total_ot_pct : null;
+  }));
+  Plotly.newPlot('chartOTRankMatrix', [{
+    z, x: months, y: depts, type: 'heatmap',
+    colorscale: [[0,'#1a3a1a'],[0.5,'#f39c12'],[1,'#c0392b']],
+    showscale: true,
+    colorbar: { thickness: 12, tickfont: { size: 9, color: '#c9d1d9' } },
+    hovertemplate: '%{y} | %{x}<br>OT: %{z}%<extra></extra>',
+  }], { ...PLOTLY_LAYOUT, height: 350, xaxis: { ...PLOTLY_LAYOUT.xaxis, tickangle: -45 },
+    yaxis: { ...PLOTLY_LAYOUT.yaxis, autorange: 'reversed' }, margin: { t: 20, b: 80, l: 130, r: 20 } }, PLOTLY_CONFIG);
+}
+
+function renderOTMatrix(deptMetrics) {
+  const sorted = [...deptMetrics].sort((a,b)=>b.total_ot_pct-a.total_ot_pct);
+  document.getElementById('otMatrixBody').innerHTML = sorted.map(d=>`
+    <tr>
+      <td>${d.department}</td>
+      <td>${d.ot1_pct}%</td><td>${d.ot2_pct}%</td><td>${d.ot3_pct}%</td>
+      <td><strong>${d.total_ot_pct}%</strong></td>
+      <td>${d.ot1_hours}</td><td>${d.ot2_hours}</td><td>${d.ot3_hours}</td>
+    </tr>`).join('');
+
+  const hBar = (divId, vals, names, title) => Plotly.newPlot(divId, [{
+    y: names, x: vals, type: 'bar', orientation: 'h',
+    marker: { color: names.map(n=>deptColor(n)) },
+  }], { ...PLOTLY_LAYOUT, title: { text: title, font: {size:11} }, margin: { t:30, b:30, l:120, r:20 } }, PLOTLY_CONFIG);
+
+  hBar('chartOT1Dept', sorted.map(d=>d.ot1_pct), sorted.map(d=>d.department), 'OT1 % by Dept');
+  hBar('chartOT2Dept', sorted.map(d=>d.ot2_pct), sorted.map(d=>d.department), 'OT2 % by Dept');
+  hBar('chartOT3Dept', sorted.map(d=>d.ot3_pct), sorted.map(d=>d.department), 'OT3 % by Dept');
+}
+
+function renderEmpTable(empMetrics) {
+  const rows = empMetrics.slice(0,200).map(e=>`
+    <tr>
+      <td>${e.id_card}</td><td>${e.department}</td><td>${e.records}</td>
+      <td class="${lightClass(e.att_pct,'att')}">${e.att_pct}%</td>
+      <td class="${lightClass(e.abs_pct,'abs')}">${e.abs_pct}%</td>
+      <td>${e.leave_pct}%</td><td>${e.missing_pct}%</td>
+      <td class="${lightClass(e.total_ot_pct,'ot')}">${e.total_ot_pct}%</td>
+      <td>${e.ot1_hours}</td><td>${e.ot2_hours}</td><td>${e.ot3_hours}</td>
+    </tr>`).join('');
+  document.getElementById('empTableBody').innerHTML = rows;
+}
+
+function renderLeaveHeatmap(leaveData) {
+  const ltypes = [...new Set(leaveData.map(r=>r.leave_type))].sort();
+  const depts  = [...new Set(leaveData.map(r=>r.department))].sort();
+  const z = ltypes.map(lt => depts.map(d => {
+    const r = leaveData.find(r=>r.leave_type===lt&&r.department===d);
+    return r ? r.total_leave_days : 0;
+  }));
+  Plotly.newPlot('chartLeaveHeatmap', [{
+    z, x: depts, y: ltypes, type: 'heatmap',
+    colorscale: [[0,'#0d2235'],[0.5,'#4a9eff'],[1,'#f39c12']],
+    showscale: true,
+    hovertemplate: '%{y}<br>%{x}<br>Days: %{z}<extra></extra>',
+  }], { ...PLOTLY_LAYOUT, margin:{ t:20, b:80, l:130, r:20 },
+    xaxis: { ...PLOTLY_LAYOUT.xaxis, tickangle:-40 },
+    yaxis: { ...PLOTLY_LAYOUT.yaxis, autorange:'reversed' } }, PLOTLY_CONFIG);
+
+  document.getElementById('leaveTableBody').innerHTML = leaveData
+    .sort((a,b)=>b.total_leave_days-a.total_leave_days).slice(0,50)
+    .map(r=>`<tr><td>${r.leave_type}</td><td>${r.department}</td><td>${r.total_leave_days}</td><td>${r.employees}</td></tr>`).join('');
+}
+
+function renderExceptions2(exc) {
+  const tbl=(id,rows,fn)=>{ document.getElementById(id).innerHTML=rows.slice(0,50).map((r,i)=>`<tr><td>${i+1}</td>${fn(r)}</tr>`).join(''); };
+  tbl('ex2AbsBody',   exc.excessive_absenteeism, r=>`<td>${r.id_card}</td><td>${r.department}</td><td class="text-danger">${r.abs_pct}%</td>`);
+  tbl('ex2OTBody',    exc.excessive_ot,          r=>`<td>${r.id_card}</td><td>${r.department}</td><td>${r.total_ot_pct}%</td><td>${r.total_ot_hours}</td>`);
+  tbl('ex2MissBody',  exc.excessive_missing,      r=>`<td>${r.id_card}</td><td>${r.department}</td><td>${r.missing_pct}%</td><td>${r.missing_hours}</td>`);
+  tbl('ex2ConsecBody',exc.consecutive_absences,   r=>`<td>${r.id_card}</td><td>${r.department}</td><td class="text-danger">${r.max_consecutive}</td>`);
+}
+
+function renderRecurring(recurring) {
+  const tbl=(id,rows,fn)=>{ document.getElementById(id).innerHTML=rows.slice(0,20).map((r,i)=>`<tr><td>${i+1}</td>${fn(r)}</tr>`).join(''); };
+  tbl('recurAbsBody', recurring.recurring_absent,  r=>`<td>${r.id_card}</td><td>${r.department}</td><td>${r.months_with_absences}</td>`);
+  tbl('recurMissBody',recurring.recurring_missing, r=>`<td>${r.id_card}</td><td>${r.department}</td><td>${r.months_with_missing}</td>`);
+}
+
+// Exception tab switching
+document.getElementById('excTabs2').addEventListener('click', e => {
+  e.preventDefault();
+  const link = e.target.closest('[data-tab2]');
+  if (!link) return;
+  document.querySelectorAll('.exception-panel').forEach(p=>p.style.display='none');
+  document.querySelectorAll('#excTabs2 .nav-link').forEach(l=>l.classList.remove('active'));
+  document.getElementById(link.dataset.tab2).style.display='block';
+  link.classList.add('active');
+});
+
+async function loadData() {
+  const overlay = document.getElementById('loadingOverlay');
+  overlay.style.display = 'flex';
+  try {
+    const params = getFilterParams();
+    const resp = await fetch('/api/drilldown?' + params.toString());
+    const data = await resp.json();
+    if (data.error) { alert(data.error); return; }
+
+    renderDeptMonthlyTable(data.mo_dept);
+    renderDeptMonthlyCharts(data.mo_dept);
+    renderOTMatrix(data.dept_metrics);
+    renderEmpTable(data.emp_metrics);
+    renderLeaveHeatmap(data.leave_data);
+    renderExceptions2(data.exceptions);
+    renderRecurring(data.recurring);
+  } catch(err) {
+    console.error(err);
+    alert('Failed to load data: ' + err.message);
+  } finally {
+    overlay.style.display = 'none';
+  }
+}
+
+['btnApplyFilters','btnApply2'].forEach(id=>{
+  document.getElementById(id)?.addEventListener('click', loadData);
+});
+document.getElementById('btnClear')?.addEventListener('click',()=>{
+  ['fDept','fYear','fMonth','fEmployee','fLeaveType'].forEach(id=>{
+    const el=document.getElementById(id);
+    if(el) Array.from(el.options).forEach(o=>o.selected=false);
+  });
+  document.getElementById('fDateFrom').value='';
+  document.getElementById('fDateTo').value='';
+  loadData();
+});
+document.getElementById('btnRefresh')?.addEventListener('click', loadData);
+
+loadData();
+</script>
+{% endblock %}
