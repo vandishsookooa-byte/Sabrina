@@ -302,6 +302,19 @@ def apply_filters(df: pd.DataFrame, f: dict) -> pd.DataFrame:
     return df
 
 
+def _to_json_safe(value):
+    """Convert NumPy/Pandas scalar values into JSON-serializable Python types."""
+    if isinstance(value, dict):
+        return {k: _to_json_safe(v) for k, v in value.items()}
+    if isinstance(value, (list, tuple, set)):
+        return [_to_json_safe(v) for v in value]
+    if isinstance(value, np.generic):
+        return value.item()
+    if isinstance(value, (pd.Timestamp, datetime, date)):
+        return value.isoformat()
+    return value
+
+
 # ─────────────────────────────────────────────────────────────────────────────
 # Metric calculation helpers
 # ─────────────────────────────────────────────────────────────────────────────
@@ -644,13 +657,13 @@ def drilldown():
 @app.route("/api/filters")
 def api_filters():
     df = load_data()
-    return jsonify({
+    return jsonify(_to_json_safe({
         "departments": sorted(df["department"].unique().tolist()),
         "months":      sorted(df["month"].unique().tolist()),
         "years":       sorted(df["year"].unique().tolist()),
         "id_cards":    sorted(df["id_card"].unique().tolist()),
         "leave_types": sorted(df["leave_type"].dropna().unique().tolist()) if "leave_type" in df.columns else [],
-    })
+    }))
 
 
 @app.route("/api/dashboard")
@@ -694,7 +707,7 @@ def api_dashboard():
         for r in month_data
     ]
 
-    return jsonify({
+    return jsonify(_to_json_safe({
         "kpis":              kpis,
         "best_dept":         best_dept,
         "worst_dept":        worst_dept,
@@ -713,7 +726,7 @@ def api_dashboard():
         "forecasts":         forecasts,
         "exceptions":        exceptions,
         "headcount_trend":   headcount_trend,
-    })
+    }))
 
 
 @app.route("/api/drilldown")
@@ -755,7 +768,7 @@ def api_drilldown():
     # Recurring patterns per employee
     recurring = _recurring_employee_patterns(df)
 
-    return jsonify({
+    return jsonify(_to_json_safe({
         "emp_metrics":   emp_metrics,
         "dept_metrics":  dept_metrics,
         "mo_dept":       mo_dept,
@@ -764,7 +777,7 @@ def api_drilldown():
         "emp_monthly":   emp_monthly,
         "ot_breakdown":  ot_breakdown,
         "recurring":     recurring,
-    })
+    }))
 
 
 def _recurring_employee_patterns(df: pd.DataFrame) -> dict:
