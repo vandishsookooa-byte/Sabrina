@@ -853,30 +853,58 @@ function renderHeatmaps(moDeptData) {
     ['heatAtt','heatAbs','heatMiss','heatOT'].forEach(id => showNoDataChart(id));
     return;
   }
-  const depts  = [...new Set(moDeptData.map(r=>r.department))].sort();
-  const months = [...new Set(moDeptData.map(r=>r.month_year))].sort();
+  const toKeyText = v => (v === null || v === undefined) ? '' : String(v).trim();
+  const toNum = v => {
+    const n = Number(v);
+    return Number.isFinite(n) ? n : null;
+  };
+  const normalized = moDeptData
+    .map(r => ({
+      department: toKeyText(r.department) || 'Unknown',
+      month_year: toKeyText(r.month_year),
+      att_pct: toNum(r.att_pct),
+      abs_pct: toNum(r.abs_pct),
+      missing_pct: toNum(r.missing_pct),
+      total_ot_pct: toNum(r.total_ot_pct),
+    }))
+    .filter(r => r.month_year);
+
+  if (!normalized.length) {
+    ['heatAtt','heatAbs','heatMiss','heatOT'].forEach(id => showNoDataChart(id));
+    return;
+  }
+
+  const depts  = [...new Set(normalized.map(r => r.department))].sort((a, b) => a.localeCompare(b));
+  const months = [...new Set(normalized.map(r => r.month_year))].sort();
+  const byDeptMonth = new Map(normalized.map(r => [`${r.department}__${r.month_year}`, r]));
 
   function buildMatrix(field) {
     return depts.map(d => months.map(my => {
-      const row = moDeptData.find(r => r.department === d && r.month_year === my);
+      const row = byDeptMonth.get(`${d}__${my}`);
       return row ? row[field] : null;
     }));
   }
 
   const heatLayout = {
     ...PLOTLY_LAYOUT,
-    xaxis: { ...PLOTLY_LAYOUT.xaxis, tickangle: -45 },
-    yaxis: { ...PLOTLY_LAYOUT.yaxis, autorange: 'reversed' },
+    xaxis: { ...PLOTLY_LAYOUT.xaxis, type: 'category', tickangle: -45 },
+    yaxis: { ...PLOTLY_LAYOUT.yaxis, type: 'category', autorange: 'reversed' },
     margin: { t: 20, b: 80, l: 120, r: 20 },
   };
 
-  const heat = (divId, z, colorscale, title) => Plotly.newPlot(divId, [{
-    z: z, x: months, y: depts, type: 'heatmap',
-    colorscale: colorscale, showscale: true,
-    colorbar: { thickness: 12, len: 0.8, tickfont: { size: 9, color: '#c9d1d9' } },
-    text: z.map(row => row.map(v => v !== null ? v+'%' : '')),
-    hovertemplate: '%{y} | %{x}<br>Value: %{z}%<extra></extra>',
-  }], heatLayout, PLOTLY_CONFIG);
+  const heat = (divId, z, colorscale, title) => {
+    if (!z.flat().some(v => v !== null)) {
+      showNoDataChart(divId);
+      return;
+    }
+    Plotly.newPlot(divId, [{
+      z: z, x: months, y: depts, type: 'heatmap',
+      colorscale: colorscale, showscale: true,
+      colorbar: { thickness: 12, len: 0.8, tickfont: { size: 9, color: '#c9d1d9' } },
+      text: z.map(row => row.map(v => v !== null ? v+'%' : '')),
+      hovertemplate: '%{y} | %{x}<br>Value: %{z}%<extra></extra>',
+    }], heatLayout, PLOTLY_CONFIG);
+  };
 
   heat('heatAtt',  buildMatrix('att_pct'),     [[0,'#c0392b'],[0.5,'#f39c12'],[1,'#27ae60']], '');
   heat('heatAbs',  buildMatrix('abs_pct'),     [[0,'#27ae60'],[0.5,'#f39c12'],[1,'#c0392b']], '');
