@@ -76,12 +76,32 @@ ABSENT_VALUES  = {
     "N/A", "U/A",
 }
 LEAVE_VALUES   = {"L", "LEAVE", "AL", "SL", "EL", "ML", "PL", "CL"}
+ABSENT_LEAVE_TYPES = {
+    "NA",
+    "UA",
+    "NOTIFIED ABSENCE",
+    "UNNOTIFIED ABSENCE",
+    "N/A",
+    "U/A",
+}
+PRESENT_LEAVE_TYPES = {
+    "WORK FROM HOME",
+    "TRAINING",
+    "BUSINESS TRIP",
+}
 APPROVED_LEAVE_TYPES = {
-    "Annual Leave",
-    "Sick Leave",
-    "Emergency Leave",
-    "Maternity Leave",
-    "Unpaid Leave",
+    "LL",
+    "SL",
+    "CL",
+    "CL(N)",
+    "LEAVE WITHOUT PAY",
+    "INJURY LEAVE",
+    "PATERNITY",
+    "STUDY LEAVE",
+    "SPECIAL LEAVE (DEATH OF NEXT TO KIN)",
+    "SPECIAL LEAVE (OWN WEDDING)",
+    "SUSPENDED LEAVE WITH PAY",
+    "SUSPEND LEAVE WITHOUT PAY",
 }
 APPROVED_LEAVE_TYPES_NORM = {t.strip().upper() for t in APPROVED_LEAVE_TYPES}
 
@@ -203,14 +223,8 @@ def generate_sample_data() -> pd.DataFrame:
     df["month_name"] = df["month"].apply(lambda m: MONTH_NAMES[m])
     df["month_year"] = df["date"].dt.to_period("M").astype(str)
     df["status_norm"] = df["status"].astype(str).str.strip().str.upper()
-    df["is_leave"]   = _approved_leave_mask(df)
-    df["is_absent"]  = _absent_mask(df, df["status_norm"]) & ~df["is_leave"]
-    df["is_present"] = df["status_norm"].isin(PRESENT_VALUES) & ~df["is_absent"] & ~df["is_leave"]
-    df["leave_quantity_approved"] = np.where(
-        df["is_leave"],
-        np.where(df["leave_quantity"] > 0, df["leave_quantity"], 1.0),
-        0.0,
-    )
+    df = _apply_attendance_classification(df)
+    _print_attendance_summary(df)
     df["total_ot"]   = df["ot1"] + df["ot2"] + df["ot3"]
     return df
 
@@ -266,6 +280,58 @@ def _normalized_leave_type(df: pd.DataFrame) -> pd.Series:
     return df["leave_type"].fillna("").astype(str).str.strip().str.upper()
 
 
+def classify_attendance(row) -> str:
+    """Return attendance category as PRESENT, LEAVE, or ABSENT."""
+    leave_type = str(row.get("leave_type", "") or "").strip().upper()
+    status_norm = str(row.get("status_norm", row.get("status", "")) or "").strip().upper()
+
+    if leave_type in ABSENT_LEAVE_TYPES or status_norm in ABSENT_VALUES:
+        return "ABSENT"
+    if leave_type in PRESENT_LEAVE_TYPES:
+        return "PRESENT"
+    if leave_type:
+        return "LEAVE"
+    if status_norm in LEAVE_VALUES:
+        return "LEAVE"
+    return "PRESENT"
+
+
+def _apply_attendance_classification(df: pd.DataFrame) -> pd.DataFrame:
+    if "leave_type" not in df.columns:
+        df["leave_type"] = ""
+    if "status_norm" not in df.columns:
+        if "status" in df.columns:
+            df["status_norm"] = df["status"].astype(str).str.strip().str.upper()
+        else:
+            df["status_norm"] = ""
+
+    df["attendance_category"] = df.apply(classify_attendance, axis=1)
+    df["is_present"] = df["attendance_category"] == "PRESENT"
+    df["is_leave"] = df["attendance_category"] == "LEAVE"
+    df["is_absent"] = df["attendance_category"] == "ABSENT"
+    df["leave_quantity_approved"] = np.where(
+        df["is_leave"],
+        np.where(df["leave_quantity"] > 0, df["leave_quantity"], 1.0),
+        0.0,
+    )
+    return df
+
+
+def _print_attendance_summary(df: pd.DataFrame) -> None:
+    present = int(df["is_present"].sum()) if "is_present" in df.columns else 0
+    leave = int(df["is_leave"].sum()) if "is_leave" in df.columns else 0
+    absent = int(df["is_absent"].sum()) if "is_absent" in df.columns else 0
+    total = int(len(df))
+
+    print("Present :", present)
+    print("Leave   :", leave)
+    print("Absent  :", absent)
+    if "attendance_category" in df.columns:
+        print(df["attendance_category"].value_counts())
+    print("Total   :", total)
+    print("Check   :", present + leave + absent == total)
+
+
 def _absent_mask(df: pd.DataFrame, status_norm: pd.Series | None = None) -> pd.Series:
     if status_norm is None:
         status_norm = (
@@ -292,14 +358,17 @@ def _normalize_excel(raw: pd.DataFrame) -> pd.DataFrame:
     df = raw.rename(columns=rename)
 
     # Log which key columns were detected / missing to help with diagnostics
-    key_cols = ("status", "leave_type", "leave_quantity", "id_card", "department", "date")
-    detected = [c for c in key_cols if c in df.columns]
-    missing  = [c for c in key_cols if c not in df.columns]
+    required_cols = ("leave_type", "leave_quantity", "id_card", "department", "date")
+    optional_cols = ("status",)
+    detected = [c for c in (*required_cols, *optional_cols) if c in df.columns]
+    missing  = [c for c in required_cols if c not in df.columns]
     if missing:
         print(f"[WARN] Excel columns NOT detected (leave/attendance may be wrong): {missing}")
         print(f"       Detected columns: {list(raw.columns)[:20]}")
     else:
         print(f"[INFO] Excel columns detected OK: {detected}")
+    if "status" not in df.columns:
+        print("[INFO] Optional column 'status' not found; attendance will be classified from leave_type.")
 
     # Ensure required columns exist
     for col in ("leave_quantity", "missing_hours", "ot1", "ot2", "ot3"):
@@ -330,23 +399,14 @@ def _normalize_excel(raw: pd.DataFrame) -> pd.DataFrame:
     if "id_card" in df.columns:
         df.loc[df["employee_name"] == "", "employee_name"] = df["id_card"].astype(str)
 
-    # Status flags
+    # Attendance classification
     if "status" in df.columns:
         df["status_norm"] = df["status"].astype(str).str.strip().str.upper()
-        df["is_leave"]   = _approved_leave_mask(df)
-        df["is_absent"]  = _absent_mask(df, df["status_norm"]) & ~df["is_leave"]
-        df["is_present"] = df["status_norm"].isin(PRESENT_VALUES) & ~df["is_absent"] & ~df["is_leave"]
     else:
-        df["status_norm"] = "P"
-        df["is_leave"]   = False
-        df["is_absent"]  = _absent_mask(df, df["status_norm"])
-        df["is_present"] = ~df["is_absent"]
+        df["status_norm"] = ""
 
-    df["leave_quantity_approved"] = np.where(
-        df["is_leave"],
-        np.where(df["leave_quantity"] > 0, df["leave_quantity"], 1.0),
-        0.0,
-    )
+    df = _apply_attendance_classification(df)
+    _print_attendance_summary(df)
     df["total_ot"] = df["ot1"] + df["ot2"] + df["ot3"]
     return df
 
