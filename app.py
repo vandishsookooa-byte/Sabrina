@@ -193,8 +193,8 @@ def generate_sample_data() -> pd.DataFrame:
     df["month_name"] = df["month"].apply(lambda m: MONTH_NAMES[m])
     df["month_year"] = df["date"].dt.to_period("M").astype(str)
     df["status_norm"] = df["status"].astype(str).str.strip().str.upper()
-    df["is_present"] = df["status_norm"].isin(PRESENT_VALUES)
-    df["is_absent"]  = df["status_norm"].isin(ABSENT_VALUES)
+    df["is_absent"]  = _absent_mask(df, df["status_norm"])
+    df["is_present"] = df["status_norm"].isin(PRESENT_VALUES) & ~df["is_absent"]
     df["is_leave"]   = _approved_leave_mask(df)
     df["leave_quantity_approved"] = np.where(
         df["is_leave"],
@@ -242,6 +242,27 @@ def load_data() -> pd.DataFrame:
     return df
 
 
+def _normalized_leave_type(df: pd.DataFrame) -> pd.Series:
+    if "leave_type" not in df.columns:
+        return pd.Series("", index=df.index, dtype="object")
+    return df["leave_type"].fillna("").astype(str).str.strip().str.upper()
+
+
+def _absent_mask(df: pd.DataFrame, status_norm: pd.Series | None = None) -> pd.Series:
+    if status_norm is None:
+        status_norm = (
+            df["status_norm"]
+            if "status_norm" in df.columns
+            else (
+                df["status"].astype(str).str.strip().str.upper()
+                if "status" in df.columns
+                else pd.Series("", index=df.index, dtype="object")
+            )
+        )
+    leave_type_norm = _normalized_leave_type(df)
+    return status_norm.isin(ABSENT_VALUES) | leave_type_norm.isin(ABSENT_VALUES)
+
+
 def _normalize_excel(raw: pd.DataFrame) -> pd.DataFrame:
     """Rename Excel columns to internal names and add derived fields."""
     rename = {}
@@ -284,13 +305,13 @@ def _normalize_excel(raw: pd.DataFrame) -> pd.DataFrame:
     # Status flags
     if "status" in df.columns:
         df["status_norm"] = df["status"].astype(str).str.strip().str.upper()
-        df["is_present"] = df["status_norm"].isin(PRESENT_VALUES)
-        df["is_absent"]  = df["status_norm"].isin(ABSENT_VALUES)
+        df["is_absent"]  = _absent_mask(df, df["status_norm"])
+        df["is_present"] = df["status_norm"].isin(PRESENT_VALUES) & ~df["is_absent"]
         df["is_leave"]   = _approved_leave_mask(df)
     else:
         df["status_norm"] = "P"
-        df["is_present"] = True
-        df["is_absent"]  = False
+        df["is_absent"]  = _absent_mask(df, df["status_norm"])
+        df["is_present"] = ~df["is_absent"]
         df["is_leave"]   = False
 
     df["leave_quantity_approved"] = np.where(
@@ -330,12 +351,12 @@ def _approved_leave_mask(df: pd.DataFrame) -> pd.Series:
     leave_type = (
         df["leave_type"].fillna("").astype(str).str.strip()
         if "leave_type" in df.columns
-        else pd.Series("", index=df.index)
+        else pd.Series("", index=df.index, dtype="object")
     )
 
     is_leave_status = status_norm.isin(LEAVE_VALUES)
     has_leave_info  = (leave_type != "") & (leave_qty > 0)
-    not_absent      = ~status_norm.isin(ABSENT_VALUES)
+    not_absent      = ~_absent_mask(df, status_norm)
 
     return is_leave_status | (has_leave_info & not_absent)
 
