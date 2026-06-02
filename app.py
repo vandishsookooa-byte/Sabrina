@@ -193,9 +193,9 @@ def generate_sample_data() -> pd.DataFrame:
     df["month_name"] = df["month"].apply(lambda m: MONTH_NAMES[m])
     df["month_year"] = df["date"].dt.to_period("M").astype(str)
     df["status_norm"] = df["status"].astype(str).str.strip().str.upper()
-    df["is_absent"]  = _absent_mask(df, df["status_norm"])
-    df["is_present"] = df["status_norm"].isin(PRESENT_VALUES) & ~df["is_absent"]
     df["is_leave"]   = _approved_leave_mask(df)
+    df["is_absent"]  = _absent_mask(df, df["status_norm"]) & ~df["is_leave"]
+    df["is_present"] = df["status_norm"].isin(PRESENT_VALUES) & ~df["is_absent"] & ~df["is_leave"]
     df["leave_quantity_approved"] = np.where(
         df["is_leave"],
         np.where(df["leave_quantity"] > 0, df["leave_quantity"], 1.0),
@@ -305,14 +305,14 @@ def _normalize_excel(raw: pd.DataFrame) -> pd.DataFrame:
     # Status flags
     if "status" in df.columns:
         df["status_norm"] = df["status"].astype(str).str.strip().str.upper()
-        df["is_absent"]  = _absent_mask(df, df["status_norm"])
-        df["is_present"] = df["status_norm"].isin(PRESENT_VALUES) & ~df["is_absent"]
         df["is_leave"]   = _approved_leave_mask(df)
+        df["is_absent"]  = _absent_mask(df, df["status_norm"]) & ~df["is_leave"]
+        df["is_present"] = df["status_norm"].isin(PRESENT_VALUES) & ~df["is_absent"] & ~df["is_leave"]
     else:
         df["status_norm"] = "P"
+        df["is_leave"]   = False
         df["is_absent"]  = _absent_mask(df, df["status_norm"])
         df["is_present"] = ~df["is_absent"]
-        df["is_leave"]   = False
 
     df["leave_quantity_approved"] = np.where(
         df["is_leave"],
@@ -351,11 +351,17 @@ def _approved_leave_mask(df: pd.DataFrame) -> pd.Series:
     )
     leave_type_upper = leave_type.str.upper()
 
-    is_leave_status     = status_norm.isin(LEAVE_VALUES)
-    has_valid_leave_type = (leave_type != "") & ~leave_type_upper.isin(ABSENT_VALUES)
-    not_absent          = ~_absent_mask(df, status_norm)
+    leave_qty = (
+        pd.to_numeric(df["leave_quantity"], errors="coerce").fillna(0)
+        if "leave_quantity" in df.columns
+        else pd.Series(0.0, index=df.index, dtype="float64")
+    )
 
-    return is_leave_status | (has_valid_leave_type & not_absent)
+    is_leave_status      = status_norm.isin(LEAVE_VALUES)
+    has_valid_leave_type = (leave_type != "") & ~leave_type_upper.isin(ABSENT_VALUES)
+    has_leave_quantity   = leave_qty > 0
+
+    return is_leave_status | has_valid_leave_type | has_leave_quantity
 
 
 def _month_order(values: list) -> list[int]:
@@ -550,7 +556,12 @@ def by_employee(df: pd.DataFrame) -> list:
 
 
 def by_leave_type_dept(df: pd.DataFrame) -> list:
-    sub = df[df["is_leave"] == True]
+    sub = df[df["is_leave"] == True].copy()
+    if "leave_type" not in sub.columns:
+        sub["leave_type"] = "Unspecified Leave"
+    else:
+        sub["leave_type"] = sub["leave_type"].fillna("").astype(str).str.strip()
+        sub.loc[sub["leave_type"] == "", "leave_type"] = "Unspecified Leave"
     out = []
     for (lt, dept), g in sub.groupby(["leave_type", "department"]):
         out.append({
