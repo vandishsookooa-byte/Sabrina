@@ -328,11 +328,12 @@ def _approved_leave_mask(df: pd.DataFrame) -> pd.Series:
 
     A row is leave when:
       • its status is a recognised leave code (LEAVE_VALUES), OR
-      • it has a non-empty leave_type with leave_quantity > 0 and the status is
-        NOT an absence code (ABSENT_VALUES).
+      • it has a non-empty leave_type that is NOT an absence marker (NA, UA, etc.)
+        and the row is not otherwise flagged as absent.
 
-    This deliberately avoids requiring the leave_type to match a hardcoded list of
-    English names so that any real-world leave category works correctly.
+    NA and UA in the leave_type column are absence markers, not leave, so they
+    are explicitly excluded from this mask.  leave_quantity is not required to be
+    positive here; leave_quantity_approved handles the default of 1 day.
     """
     status_norm = (
         df["status_norm"]
@@ -340,25 +341,21 @@ def _approved_leave_mask(df: pd.DataFrame) -> pd.Series:
         else (
             df["status"].astype(str).str.strip().str.upper()
             if "status" in df.columns
-            else pd.Series("", index=df.index)
+            else pd.Series("", index=df.index, dtype="object")
         )
-    )
-    leave_qty = (
-        pd.to_numeric(df["leave_quantity"], errors="coerce").fillna(0)
-        if "leave_quantity" in df.columns
-        else pd.Series(0.0, index=df.index)
     )
     leave_type = (
         df["leave_type"].fillna("").astype(str).str.strip()
         if "leave_type" in df.columns
         else pd.Series("", index=df.index, dtype="object")
     )
+    leave_type_upper = leave_type.str.upper()
 
-    is_leave_status = status_norm.isin(LEAVE_VALUES)
-    has_leave_info  = (leave_type != "") & (leave_qty > 0)
-    not_absent      = ~_absent_mask(df, status_norm)
+    is_leave_status     = status_norm.isin(LEAVE_VALUES)
+    has_valid_leave_type = (leave_type != "") & ~leave_type_upper.isin(ABSENT_VALUES)
+    not_absent          = ~_absent_mask(df, status_norm)
 
-    return is_leave_status | (has_leave_info & not_absent)
+    return is_leave_status | (has_valid_leave_type & not_absent)
 
 
 def _month_order(values: list) -> list[int]:
