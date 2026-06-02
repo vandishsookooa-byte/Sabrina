@@ -11,11 +11,12 @@ import os
 import json
 import random
 import calendar
+from io import BytesIO
 from datetime import datetime, timedelta, date
 
 import numpy as np
 import pandas as pd
-from flask import Flask, render_template, jsonify, request
+from flask import Flask, render_template, jsonify, request, send_file
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Configuration
@@ -46,6 +47,7 @@ MONTH_NAMES = [
 # ─────────────────────────────────────────────────────────────────────────────
 COLUMN_ALIASES = {
     "id_card":        ["ID Card", "Employee ID", "EmpID", "ID", "Card No", "Emp ID", "Employee Id"],
+    "employee_name":  ["Employee Name", "Name", "Emp Name", "Full Name", "Employee"],
     "department":     ["Department", "Dept", "Department Name", "DEPARTMENT"],
     "date":           ["Date", "Attendance Date", "Att Date", "Work Date", "ATTENDANCE_DATE"],
     "status":         ["Status", "Attendance Status", "Att Status", "ATTENDANCE"],
@@ -57,9 +59,16 @@ COLUMN_ALIASES = {
     "ot3":            ["OT3", "OT 3", "Overtime 3", "OT-3", "Over Time 3", "OT_3"],
 }
 
-PRESENT_VALUES = {"P", "PRESENT", "Present", "A-P", "AP", "1"}
-ABSENT_VALUES  = {"A", "ABSENT", "Absent", "AB", "ABS", "0"}
-LEAVE_VALUES   = {"L", "LEAVE", "Leave", "AL", "SL", "EL", "ML", "PL", "CL"}
+PRESENT_VALUES = {"P", "PRESENT", "A-P", "AP", "1"}
+ABSENT_VALUES  = {"A", "ABSENT", "AB", "ABS", "0", "NA", "UA"}
+LEAVE_VALUES   = {"L", "LEAVE", "AL", "SL", "EL", "ML", "PL", "CL"}
+APPROVED_LEAVE_TYPES = {
+    "Annual Leave",
+    "Sick Leave",
+    "Emergency Leave",
+    "Maternity Leave",
+    "Unpaid Leave",
+}
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Sample data generation (used when the Excel file is not found)
@@ -104,6 +113,7 @@ def generate_sample_data() -> pd.DataFrame:
 
     for dept, cfg in DEPARTMENTS.items():
         emp_ids = [f"EMP{str(emp_counter + i).zfill(4)}" for i in range(cfg["size"])]
+        emp_names = {emp_id: f"Employee {emp_id[-4:]}" for emp_id in emp_ids}
         emp_counter += cfg["size"]
 
         for month in months:
@@ -160,6 +170,7 @@ def generate_sample_data() -> pd.DataFrame:
 
                     rows.append({
                         "id_card":        emp,
+                        "employee_name":  emp_names[emp],
                         "department":     dept,
                         "date":           pd.Timestamp(d),
                         "status":         status,
@@ -176,9 +187,11 @@ def generate_sample_data() -> pd.DataFrame:
     df["year"]  = df["date"].dt.year
     df["month_name"] = df["month"].apply(lambda m: MONTH_NAMES[m])
     df["month_year"] = df["date"].dt.to_period("M").astype(str)
-    df["is_present"] = df["status"].isin(PRESENT_VALUES)
-    df["is_absent"]  = df["status"].isin(ABSENT_VALUES)
-    df["is_leave"]   = df["status"].isin(LEAVE_VALUES)
+    df["status_norm"] = df["status"].astype(str).str.strip().str.upper()
+    df["is_present"] = df["status_norm"].isin(PRESENT_VALUES)
+    df["is_absent"]  = df["status_norm"].isin(ABSENT_VALUES)
+    df["is_leave"]   = _approved_leave_mask(df)
+    df["leave_quantity_approved"] = np.where(df["is_leave"], df["leave_quantity"], 0.0)
     df["total_ot"]   = df["ot1"] + df["ot2"] + df["ot3"]
     return df
 
@@ -234,6 +247,8 @@ def _normalize_excel(raw: pd.DataFrame) -> pd.DataFrame:
     for col in ("leave_quantity", "missing_hours", "ot1", "ot2", "ot3"):
         if col not in df.columns:
             df[col] = 0.0
+    if "employee_name" not in df.columns:
+        df["employee_name"] = ""
 
     # Date handling
     if "date" in df.columns:
@@ -253,19 +268,73 @@ def _normalize_excel(raw: pd.DataFrame) -> pd.DataFrame:
     # Normalize numeric columns
     for col in ("leave_quantity", "missing_hours", "ot1", "ot2", "ot3"):
         df[col] = pd.to_numeric(df[col], errors="coerce").fillna(0)
+    df["employee_name"] = df["employee_name"].fillna("").astype(str).str.strip()
+    if "id_card" in df.columns:
+        df.loc[df["employee_name"] == "", "employee_name"] = df["id_card"].astype(str)
 
     # Status flags
     if "status" in df.columns:
-        df["is_present"] = df["status"].astype(str).isin(PRESENT_VALUES)
-        df["is_absent"]  = df["status"].astype(str).isin(ABSENT_VALUES)
-        df["is_leave"]   = df["status"].astype(str).isin(LEAVE_VALUES)
+        df["status_norm"] = df["status"].astype(str).str.strip().str.upper()
+        df["is_present"] = df["status_norm"].isin(PRESENT_VALUES)
+        df["is_absent"]  = df["status_norm"].isin(ABSENT_VALUES)
+        df["is_leave"]   = _approved_leave_mask(df)
     else:
+        df["status_norm"] = "P"
         df["is_present"] = True
         df["is_absent"]  = False
         df["is_leave"]   = False
 
+    df["leave_quantity_approved"] = np.where(df["is_leave"], df["leave_quantity"], 0.0)
     df["total_ot"] = df["ot1"] + df["ot2"] + df["ot3"]
     return df
+
+
+def _approved_leave_mask(df: pd.DataFrame) -> pd.Series:
+    if "leave_type" not in df.columns:
+        return pd.Series(False, index=df.index)
+    leave_type = df["leave_type"].fillna("").astype(str).str.strip()
+    status_norm = df["status"].astype(str).str.strip().str.upper() if "status" in df.columns else ""
+    return (
+        leave_type.isin(APPROVED_LEAVE_TYPES)
+        & (pd.to_numeric(df["leave_quantity"], errors="coerce").fillna(0) > 0)
+        & (
+            ~pd.Series(status_norm).isin(ABSENT_VALUES)
+            if isinstance(status_norm, pd.Series)
+            else True
+        )
+    )
+
+
+def _month_order(values: list) -> list[int]:
+    ordered = []
+    for v in values:
+        try:
+            m = int(v)
+        except (TypeError, ValueError):
+            continue
+        if 1 <= m <= 12 and m not in ordered:
+            ordered.append(m)
+    return sorted(ordered)
+
+
+def _employee_lookup(df: pd.DataFrame) -> dict:
+    if "id_card" not in df.columns:
+        return {}
+    sub = df[["id_card", "employee_name"]].drop_duplicates()
+    return {
+        str(r["id_card"]): str(r["employee_name"] or r["id_card"])
+        for _, r in sub.iterrows()
+    }
+
+
+def _employee_name(df: pd.DataFrame, emp_id: str) -> str:
+    if "employee_name" not in df.columns:
+        return emp_id
+    sub = df[df["id_card"] == emp_id]["employee_name"]
+    if sub.empty:
+        return emp_id
+    val = str(sub.iloc[0]).strip()
+    return val if val else emp_id
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -328,7 +397,8 @@ def _agg_metrics(group: pd.DataFrame) -> dict:
 
     present = group["is_present"].sum() if "is_present" in group else n
     absent  = group["is_absent"].sum()  if "is_absent"  in group else 0
-    leave   = group["leave_quantity"].sum()
+    leave_col = "leave_quantity_approved" if "leave_quantity_approved" in group.columns else "leave_quantity"
+    leave   = group[leave_col].sum()
 
     ot1 = group["ot1"].sum()
     ot2 = group["ot2"].sum()
@@ -415,6 +485,7 @@ def by_employee(df: pd.DataFrame) -> list:
     for emp, g in df.groupby("id_card"):
         m = _agg_metrics(g)
         m["id_card"] = emp
+        m["employee_name"] = _employee_name(df, emp)
         dept_series = g["department"].mode()
         m["department"] = dept_series.iloc[0] if not dept_series.empty else "Unknown"
         out.append(m)
@@ -422,13 +493,13 @@ def by_employee(df: pd.DataFrame) -> list:
 
 
 def by_leave_type_dept(df: pd.DataFrame) -> list:
-    sub = df[df["leave_type"].notna() & (df["leave_type"] != "") & (df["leave_quantity"] > 0)]
+    sub = df[df["is_leave"] == True]
     out = []
     for (lt, dept), g in sub.groupby(["leave_type", "department"]):
         out.append({
             "leave_type": lt,
             "department": dept,
-            "total_leave_days": round(g["leave_quantity"].sum(), 1),
+            "total_leave_days": round(g["leave_quantity_approved"].sum(), 1),
             "employees": g["id_card"].nunique(),
         })
     return out
@@ -517,13 +588,21 @@ def manpower_risk(monthly_dept: list) -> dict:
 
 def exception_reports(df: pd.DataFrame, emp_metrics: list) -> dict:
     # Employees with no leave
-    all_leave = set(df[df["leave_quantity"] > 0]["id_card"].unique())
+    all_leave = set(df[df["leave_quantity_approved"] > 0]["id_card"].unique())
     all_emp   = set(df["id_card"].unique())
-    no_leave  = [{"id_card": e, "department": _emp_dept(df, e)} for e in (all_emp - all_leave)]
+    no_leave  = [
+        {
+            "id_card": e,
+            "employee_name": _employee_name(df, e),
+            "department": _emp_dept(df, e),
+        }
+        for e in (all_emp - all_leave)
+    ]
 
     # Excessive OT (total_ot_pct > 25%)
     exc_ot = [
         {"id_card": e["id_card"], "department": e["department"],
+         "employee_name": e.get("employee_name", e["id_card"]),
          "total_ot_pct": e["total_ot_pct"], "total_ot_hours": e["total_ot_hours"]}
         for e in emp_metrics if e.get("total_ot_pct", 0) > 25
     ]
@@ -531,13 +610,14 @@ def exception_reports(df: pd.DataFrame, emp_metrics: list) -> dict:
     # Excessive missing hours (missing_pct > 10%)
     exc_miss = [
         {"id_card": e["id_card"], "department": e["department"],
+         "employee_name": e.get("employee_name", e["id_card"]),
          "missing_pct": e["missing_pct"], "missing_hours": e["missing_hours"]}
         for e in emp_metrics if e.get("missing_pct", 0) > 10
     ]
 
     # Excessive absenteeism (abs_pct > 15%)
     exc_abs = [
-        {"id_card": e["id_card"], "department": e["department"], "abs_pct": e["abs_pct"]}
+        {"id_card": e["id_card"], "department": e["department"], "employee_name": e.get("employee_name", e["id_card"]), "abs_pct": e["abs_pct"]}
         for e in emp_metrics if e.get("abs_pct", 0) > 15
     ]
 
@@ -577,8 +657,21 @@ def _find_consecutive_absences(df: pd.DataFrame, min_days: int = 3) -> list:
                 streak = 1
         if max_s >= min_days:
             dept = _emp_dept(df, emp)
-            results.append({"id_card": emp, "department": dept, "max_consecutive": max_s})
+            results.append({
+                "id_card": emp,
+                "employee_name": _employee_name(df, emp),
+                "department": dept,
+                "max_consecutive": max_s,
+            })
     return sorted(results, key=lambda x: -x["max_consecutive"])
+
+
+def _last_data_refresh_date(df: pd.DataFrame) -> str:
+    if "date" in df.columns:
+        dmax = pd.to_datetime(df["date"], errors="coerce").max()
+        if pd.notna(dmax):
+            return dmax.strftime("%Y-%m-%d")
+    return datetime.now().strftime("%Y-%m-%d")
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -633,10 +726,11 @@ def index():
     df = load_data()
     filters_meta = {
         "departments": sorted(df["department"].unique().tolist()),
-        "months":      sorted(df["month"].unique().tolist()),
+        "months":      _month_order(df["month"].unique().tolist()),
         "years":       sorted(df["year"].unique().tolist()),
         "id_cards":    sorted(df["id_card"].unique().tolist()),
         "leave_types": sorted(df["leave_type"].dropna().unique().tolist()) if "leave_type" in df.columns else [],
+        "employees":   [{"id_card": k, "employee_name": v} for k, v in sorted(_employee_lookup(df).items())],
     }
     return render_template("index.html", filters_meta=filters_meta)
 
@@ -646,12 +740,18 @@ def drilldown():
     df = load_data()
     filters_meta = {
         "departments": sorted(df["department"].unique().tolist()),
-        "months":      sorted(df["month"].unique().tolist()),
+        "months":      _month_order(df["month"].unique().tolist()),
         "years":       sorted(df["year"].unique().tolist()),
         "id_cards":    sorted(df["id_card"].unique().tolist()),
         "leave_types": sorted(df["leave_type"].dropna().unique().tolist()) if "leave_type" in df.columns else [],
+        "employees":   [{"id_card": k, "employee_name": v} for k, v in sorted(_employee_lookup(df).items())],
     }
     return render_template("drilldown.html", filters_meta=filters_meta)
+
+
+@app.route("/methodology")
+def methodology():
+    return render_template("methodology.html", thresholds=THRESHOLDS, approved_leave_types=sorted(APPROVED_LEAVE_TYPES))
 
 
 @app.route("/api/filters")
@@ -659,21 +759,55 @@ def api_filters():
     df = load_data()
     return jsonify(_to_json_safe({
         "departments": sorted(df["department"].unique().tolist()),
-        "months":      sorted(df["month"].unique().tolist()),
+        "months":      _month_order(df["month"].unique().tolist()),
         "years":       sorted(df["year"].unique().tolist()),
         "id_cards":    sorted(df["id_card"].unique().tolist()),
         "leave_types": sorted(df["leave_type"].dropna().unique().tolist()) if "leave_type" in df.columns else [],
+        "employees":   [{"id_card": k, "employee_name": v} for k, v in sorted(_employee_lookup(df).items())],
     }))
 
 
 @app.route("/api/dashboard")
 def api_dashboard():
-    df = load_data()
+    df_raw = load_data()
+    df = df_raw.copy()
     f  = parse_filters(request)
     df = apply_filters(df, f)
 
     if df.empty:
-        return jsonify({"error": "No data for selected filters"}), 200
+        return jsonify(_to_json_safe({
+            "kpis": {},
+            "best_dept": "N/A",
+            "worst_dept": "N/A",
+            "dept_metrics": [],
+            "month_data": [],
+            "mo_dept_data": [],
+            "top_ot": [],
+            "top_miss": [],
+            "top_abs": [],
+            "dept_rank_att": [],
+            "dept_rank_abs": [],
+            "dept_rank_ot": [],
+            "dept_rank_miss": [],
+            "leave_data": [],
+            "risks": {},
+            "forecasts": {},
+            "exceptions": {
+                "no_leave": [],
+                "excessive_ot": [],
+                "excessive_missing": [],
+                "excessive_absenteeism": [],
+                "consecutive_absences": [],
+            },
+            "headcount_trend": [],
+            "no_data": True,
+            "message": "No data available for the selected filters.",
+            "last_data_refresh_date": _last_data_refresh_date(df_raw),
+            "data_validation": {
+                "total_records_loaded": int(len(df_raw)),
+                "records_after_filters": 0,
+            },
+        })), 200
 
     kpis         = overall_kpis(df)
     dept_metrics = by_department(df)
@@ -696,9 +830,25 @@ def api_dashboard():
     dept_rank_ot   = sorted(dept_metrics, key=lambda x: -x.get("total_ot_pct", 0))
     dept_rank_miss = sorted(dept_metrics, key=lambda x: -x.get("missing_pct", 0))
 
-    # Best / needs attention
-    best_dept    = dept_rank_att[0]["department"] if dept_rank_att else "N/A"
-    worst_dept   = dept_rank_abs[0]["department"] if dept_rank_abs else "N/A"
+    # Best / needs attention based on composite department score
+    dept_scores = sorted(
+        [
+            {
+                "department": d["department"],
+                "score": round(
+                    d["att_pct"] - d["abs_pct"] * 0.5 - d["total_ot_pct"] * 0.3 - d["missing_pct"] * 0.5 - d["leave_pct"] * 0.3,
+                    2,
+                ),
+            }
+            for d in dept_metrics
+        ],
+        key=lambda x: x["score"],
+        reverse=True,
+    )
+    best_dept = dept_scores[0]["department"] if dept_scores else "N/A"
+    worst_dept = dept_scores[-1]["department"] if dept_scores else "N/A"
+    if best_dept == worst_dept and len(dept_scores) > 1:
+        worst_dept = dept_scores[-2]["department"]
 
     # Headcount trend (monthly)
     headcount_trend = [
@@ -726,17 +876,47 @@ def api_dashboard():
         "forecasts":         forecasts,
         "exceptions":        exceptions,
         "headcount_trend":   headcount_trend,
+        "no_data":           False,
+        "message":           "",
+        "last_data_refresh_date": _last_data_refresh_date(df_raw),
+        "data_validation": {
+            "total_records_loaded": int(len(df_raw)),
+            "records_after_filters": int(len(df)),
+        },
     }))
 
 
 @app.route("/api/drilldown")
 def api_drilldown():
-    df = load_data()
+    df_raw = load_data()
+    df = df_raw.copy()
     f  = parse_filters(request)
     df = apply_filters(df, f)
 
     if df.empty:
-        return jsonify({"error": "No data"}), 200
+        return jsonify(_to_json_safe({
+            "emp_metrics": [],
+            "dept_metrics": [],
+            "mo_dept": [],
+            "leave_data": [],
+            "exceptions": {
+                "no_leave": [],
+                "excessive_ot": [],
+                "excessive_missing": [],
+                "excessive_absenteeism": [],
+                "consecutive_absences": [],
+            },
+            "emp_monthly": [],
+            "ot_breakdown": [],
+            "recurring": {"recurring_absent": [], "recurring_missing": []},
+            "no_data": True,
+            "message": "No data available for the selected filters.",
+            "last_data_refresh_date": _last_data_refresh_date(df_raw),
+            "data_validation": {
+                "total_records_loaded": int(len(df_raw)),
+                "records_after_filters": 0,
+            },
+        })), 200
 
     emp_metrics  = by_employee(df)
     dept_metrics = by_department(df)
@@ -749,7 +929,7 @@ def api_drilldown():
     if f.get("id_cards"):
         for (emp, yr, mo), g in df.groupby(["id_card", "year", "month"]):
             m = _agg_metrics(g)
-            m.update({"id_card": emp, "year": int(yr), "month": int(mo),
+            m.update({"id_card": emp, "employee_name": _employee_name(df, emp), "year": int(yr), "month": int(mo),
                       "month_name": MONTH_NAMES[int(mo)]})
             emp_monthly.append(m)
 
@@ -777,6 +957,13 @@ def api_drilldown():
         "emp_monthly":   emp_monthly,
         "ot_breakdown":  ot_breakdown,
         "recurring":     recurring,
+        "no_data":       False,
+        "message":       "",
+        "last_data_refresh_date": _last_data_refresh_date(df_raw),
+        "data_validation": {
+            "total_records_loaded": int(len(df_raw)),
+            "records_after_filters": int(len(df)),
+        },
     }))
 
 
@@ -794,12 +981,12 @@ def _recurring_employee_patterns(df: pd.DataFrame) -> dict:
 
         if n_months_with_abs >= 3:
             abs_recurring.append({
-                "id_card": emp, "department": dept,
+                "id_card": emp, "employee_name": _employee_name(df, emp), "department": dept,
                 "months_with_absences": int(n_months_with_abs)
             })
         if n_months_with_miss >= 3:
             miss_recurring.append({
-                "id_card": emp, "department": dept,
+                "id_card": emp, "employee_name": _employee_name(df, emp), "department": dept,
                 "months_with_missing": int(n_months_with_miss)
             })
 
@@ -807,6 +994,40 @@ def _recurring_employee_patterns(df: pd.DataFrame) -> dict:
         "recurring_absent":  sorted(abs_recurring,  key=lambda x: -x["months_with_absences"])[:20],
         "recurring_missing": sorted(miss_recurring, key=lambda x: -x["months_with_missing"])[:20],
     }
+
+
+@app.route("/api/export")
+def api_export():
+    df = load_data().copy()
+    f = parse_filters(request)
+    df = apply_filters(df, f)
+
+    if request.args.get("selected_department_only", "").lower() in {"1", "true", "yes"} and f.get("departments"):
+        df = df[df["department"] == f["departments"][0]]
+
+    export_cols = [
+        c for c in [
+            "id_card", "employee_name", "department", "date", "year", "month", "status", "leave_type",
+            "leave_quantity", "leave_quantity_approved", "is_present", "is_absent", "is_leave",
+            "missing_hours", "ot1", "ot2", "ot3", "total_ot",
+        ] if c in df.columns
+    ]
+    out_df = df[export_cols].copy()
+    if "date" in out_df.columns:
+        out_df["date"] = pd.to_datetime(out_df["date"], errors="coerce").dt.strftime("%Y-%m-%d")
+
+    output = BytesIO()
+    with pd.ExcelWriter(output, engine="openpyxl") as writer:
+        out_df.to_excel(writer, index=False, sheet_name="AttendanceData")
+    output.seek(0)
+
+    stamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    return send_file(
+        output,
+        mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        as_attachment=True,
+        download_name=f"attendance_export_{stamp}.xlsx",
+    )
 
 
 # ─────────────────────────────────────────────────────────────────────────────

@@ -90,6 +90,8 @@ The app auto-detects common column name variants. The table below shows the inte
 | `/api/dashboard` | JSON API for executive dashboard data |
 | `/api/drilldown` | JSON API for drill-down data |
 | `/api/filters` | JSON API returning available filter options |
+| `/api/export` | Export filtered attendance records to Excel |
+| `/methodology` | Calculation methodology and threshold reference page |
 
 All API endpoints accept these query parameters:
 `departments`, `years`, `months`, `id_cards`, `leave_types`, `date_from`, `date_to`

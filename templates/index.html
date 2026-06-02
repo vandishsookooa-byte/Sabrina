@@ -14,10 +14,24 @@
       <button class="btn btn-sm btn-outline-secondary" id="btnRefresh" title="Refresh data">
         <i class="bi bi-arrow-clockwise"></i>
       </button>
+      <button class="btn btn-sm btn-outline-secondary" id="btnExportAll" title="Export to Excel">
+        <i class="bi bi-download me-1"></i>Export
+      </button>
+      <button class="btn btn-sm btn-outline-secondary" id="btnExportDept" title="Export selected department only">
+        <i class="bi bi-building-down me-1"></i>Export Selected Dept
+      </button>
+      <a class="btn btn-sm btn-outline-secondary" href="/methodology">
+        <i class="bi bi-journal-text me-1"></i>Calculation Methodology
+      </a>
       <button class="btn btn-sm btn-accent" id="btnApplyFilters">
         <i class="bi bi-funnel me-1"></i>Apply Filters
       </button>
     </div>
+  </div>
+  <div class="alert alert-dark border-secondary py-2 px-3 mb-3 d-flex flex-wrap gap-3 align-items-center">
+    <span><strong>Last Data Refresh:</strong> <span id="lastRefreshDate">—</span></span>
+    <span><strong>Total Records Loaded:</strong> <span id="totalRecordsLoaded">—</span></span>
+    <span><strong>Records After Filters:</strong> <span id="recordsAfterFilters">—</span></span>
   </div>
 
   <!-- ── Filter Panel ─────────────────────────────────────────────────── -->
@@ -57,8 +71,8 @@
           <div class="col-md-3 col-sm-6">
             <label class="filter-label">Employee (ID Card)</label>
             <select id="fEmployee" multiple class="filter-select">
-              {% for e in filters_meta.id_cards %}
-              <option value="{{ e }}">{{ e }}</option>
+              {% for e in filters_meta.employees %}
+              <option value="{{ e.id_card }}">{{ e.id_card }} - {{ e.employee_name }}</option>
               {% endfor %}
             </select>
           </div>
@@ -378,7 +392,7 @@
         <div class="section-header"><i class="bi bi-person-badge me-2 text-warning"></i>Top 10 – Highest OT</div>
         <div class="table-responsive">
           <table class="data-table">
-            <thead><tr><th>#</th><th>ID Card</th><th>Dept</th><th>OT Hrs</th><th>OT %</th></tr></thead>
+           <thead><tr><th>#</th><th>ID Card</th><th>Employee Name</th><th>Dept</th><th>OT Hrs</th><th>OT %</th></tr></thead>
             <tbody id="topOTBody"></tbody>
           </table>
         </div>
@@ -389,7 +403,7 @@
         <div class="section-header"><i class="bi bi-person-badge me-2 text-info"></i>Top 10 – Highest Missing Hrs</div>
         <div class="table-responsive">
           <table class="data-table">
-            <thead><tr><th>#</th><th>ID Card</th><th>Dept</th><th>Miss Hrs</th><th>Miss %</th></tr></thead>
+           <thead><tr><th>#</th><th>ID Card</th><th>Employee Name</th><th>Dept</th><th>Miss Hrs</th><th>Miss %</th></tr></thead>
             <tbody id="topMissBody"></tbody>
           </table>
         </div>
@@ -400,7 +414,7 @@
         <div class="section-header"><i class="bi bi-person-badge me-2 text-danger"></i>Top 10 – Highest Absenteeism</div>
         <div class="table-responsive">
           <table class="data-table">
-            <thead><tr><th>#</th><th>ID Card</th><th>Dept</th><th>Abs %</th></tr></thead>
+           <thead><tr><th>#</th><th>ID Card</th><th>Employee Name</th><th>Dept</th><th>Abs %</th></tr></thead>
             <tbody id="topAbsBody"></tbody>
           </table>
         </div>
@@ -483,23 +497,23 @@
       <li class="nav-item"><a class="nav-link" data-tab="exc-consec" href="#">3+ Consecutive Absences</a></li>
     </ul>
     <div id="exc-abs" class="exception-panel active table-responsive">
-      <table class="data-table"><thead><tr><th>#</th><th>ID Card</th><th>Department</th><th>Absenteeism %</th></tr></thead>
+      <table class="data-table"><thead><tr><th>#</th><th>ID Card</th><th>Employee Name</th><th>Department</th><th>Absenteeism %</th></tr></thead>
       <tbody id="excAbsBody"></tbody></table>
     </div>
     <div id="exc-ot" class="exception-panel table-responsive" style="display:none">
-      <table class="data-table"><thead><tr><th>#</th><th>ID Card</th><th>Department</th><th>OT %</th><th>OT Hrs</th></tr></thead>
+      <table class="data-table"><thead><tr><th>#</th><th>ID Card</th><th>Employee Name</th><th>Department</th><th>OT %</th><th>OT Hrs</th></tr></thead>
       <tbody id="excOTBody"></tbody></table>
     </div>
     <div id="exc-miss" class="exception-panel table-responsive" style="display:none">
-      <table class="data-table"><thead><tr><th>#</th><th>ID Card</th><th>Department</th><th>Missing %</th><th>Missing Hrs</th></tr></thead>
+      <table class="data-table"><thead><tr><th>#</th><th>ID Card</th><th>Employee Name</th><th>Department</th><th>Missing %</th><th>Missing Hrs</th></tr></thead>
       <tbody id="excMissBody"></tbody></table>
     </div>
     <div id="exc-noleave" class="exception-panel table-responsive" style="display:none">
-      <table class="data-table"><thead><tr><th>#</th><th>ID Card</th><th>Department</th></tr></thead>
+      <table class="data-table"><thead><tr><th>#</th><th>ID Card</th><th>Employee Name</th><th>Department</th></tr></thead>
       <tbody id="excNoLeaveBody"></tbody></table>
     </div>
     <div id="exc-consec" class="exception-panel table-responsive" style="display:none">
-      <table class="data-table"><thead><tr><th>#</th><th>ID Card</th><th>Department</th><th>Max Consecutive Absences</th></tr></thead>
+      <table class="data-table"><thead><tr><th>#</th><th>ID Card</th><th>Employee Name</th><th>Department</th><th>Max Consecutive Absences</th></tr></thead>
       <tbody id="excConsecBody"></tbody></table>
     </div>
   </div>
@@ -558,6 +572,26 @@ const choicesOpts = {
   const el = document.getElementById(id);
   if (el) new Choices(el, choicesOpts);
 });
+
+const NO_DATA_MSG = 'No data available for the selected filters.';
+function showNoDataChart(divId, message = NO_DATA_MSG) {
+  Plotly.newPlot(divId, [], {
+    ...PLOTLY_LAYOUT,
+    annotations: [{
+      text: message,
+      showarrow: false,
+      font: { color: '#c9d1d9', size: 12 },
+      x: 0.5, y: 0.5, xref: 'paper', yref: 'paper',
+    }],
+    xaxis: { visible: false },
+    yaxis: { visible: false },
+  }, PLOTLY_CONFIG);
+}
+function setNoDataTableBody(tbodyId, colspan, message = NO_DATA_MSG) {
+  const tbody = document.getElementById(tbodyId);
+  if (!tbody) return;
+  tbody.innerHTML = `<tr><td colspan="${colspan}" class="text-center text-muted">${message}</td></tr>`;
+}
 
 // ────────────────────────────────────────────────────────────────────────────
 // Plotly dark layout defaults
@@ -647,6 +681,10 @@ function renderKPIs(kpis) {
 // ────────────────────────────────────────────────────────────────────────────
 function renderMonthlySummary(monthData) {
   const tbody = document.getElementById('monthlySummaryBody');
+  if (!monthData?.length) {
+    setNoDataTableBody('monthlySummaryBody', 8);
+    return;
+  }
   tbody.innerHTML = monthData.map(r => `
     <tr>
       <td>${r.month_name}</td><td>${r.year}</td>
@@ -669,6 +707,10 @@ function lightClass(val, type) {
 // Line trend chart helper
 // ────────────────────────────────────────────────────────────────────────────
 function lineTrend(divId, title, labels, traces) {
+  if (!labels.length || !traces.length) {
+    showNoDataChart(divId);
+    return;
+  }
   const layout = { ...PLOTLY_LAYOUT, title: { text: '', font: { size: 12 } } };
   Plotly.newPlot(divId, traces, layout, PLOTLY_CONFIG);
 }
@@ -677,6 +719,10 @@ function lineTrend(divId, title, labels, traces) {
 // Render monthly trend charts
 // ────────────────────────────────────────────────────────────────────────────
 function renderTrends(monthData) {
+  if (!monthData?.length) {
+    ['chartAttTrend','chartOTTrend','chartLeaveTrend','chartMissingTrend'].forEach(id => showNoDataChart(id));
+    return;
+  }
   const labels = monthData.map(r => r.month_name + ' ' + r.year);
 
   // Attendance & Absenteeism
@@ -708,6 +754,10 @@ function renderTrends(monthData) {
 // Render department bar charts
 // ────────────────────────────────────────────────────────────────────────────
 function renderDeptBars(depts) {
+  if (!depts?.length) {
+    ['chartDeptAtt','chartDeptAbs','chartDeptOT','chartDeptMiss'].forEach(id => showNoDataChart(id));
+    return;
+  }
   const names  = depts.map(d => d.department);
   const colors = names.map(n => deptColor(n));
   const barLayout = { ...PLOTLY_LAYOUT, xaxis: { ...PLOTLY_LAYOUT.xaxis, tickangle: -30 }, margin: { t: 20, b: 80, l: 50, r: 10 } };
@@ -723,6 +773,10 @@ function renderDeptBars(depts) {
 // Correlation scatter
 // ────────────────────────────────────────────────────────────────────────────
 function renderCorrelation(depts) {
+  if (!depts?.length) {
+    showNoDataChart('chartCorrelation');
+    return;
+  }
   const trace = {
     x: depts.map(d => d.abs_pct),
     y: depts.map(d => d.total_ot_pct),
@@ -745,6 +799,11 @@ function renderCorrelation(depts) {
 // OT breakdown table + top-5 charts
 // ────────────────────────────────────────────────────────────────────────────
 function renderOTBreakdown(depts) {
+  if (!depts?.length) {
+    setNoDataTableBody('otBreakdownBody', 10);
+    ['chartTopOT1','chartTopOT2','chartTopOT3'].forEach(id => showNoDataChart(id));
+    return;
+  }
   const sorted = [...depts].sort((a,b) => b.total_ot_pct - a.total_ot_pct);
   document.getElementById('otBreakdownBody').innerHTML = sorted.map((d,i) => `
     <tr>
@@ -773,6 +832,10 @@ function renderOTBreakdown(depts) {
 // Heat maps (department × month)
 // ────────────────────────────────────────────────────────────────────────────
 function renderHeatmaps(moDeptData) {
+  if (!moDeptData?.length) {
+    ['heatAtt','heatAbs','heatMiss','heatOT'].forEach(id => showNoDataChart(id));
+    return;
+  }
   const depts  = [...new Set(moDeptData.map(r=>r.department))].sort();
   const months = [...new Set(moDeptData.map(r=>r.month_year))].sort();
 
@@ -808,6 +871,10 @@ function renderHeatmaps(moDeptData) {
 // Scorecard
 // ────────────────────────────────────────────────────────────────────────────
 function renderScorecard(depts) {
+  if (!depts?.length) {
+    setNoDataTableBody('scorecardBody', 9);
+    return;
+  }
   // Score: weighted (Att↑ + Abs↓ + OT↓ + Miss↓ + Leave↓)
   const scored = depts.map(d => ({
     ...d,
@@ -832,6 +899,10 @@ function renderScorecard(depts) {
 // ────────────────────────────────────────────────────────────────────────────
 function renderRankings(attTop, absTop, otTop, missTop) {
   function makeList(containerId, items, field, unit, ascending) {
+    if (!items?.length) {
+      document.getElementById(containerId).innerHTML = `<div class="text-muted small">${NO_DATA_MSG}</div>`;
+      return;
+    }
     document.getElementById(containerId).innerHTML = items.map((d,i) => {
       const color = i===0?'#f39c12':i===1?'#8a8a8a':i===2?'#cd7f32':'#4a9eff';
       return `<div class="rank-item">
@@ -851,17 +922,25 @@ function renderRankings(attTop, absTop, otTop, missTop) {
 // Employee top-10 tables
 // ────────────────────────────────────────────────────────────────────────────
 function renderTopEmployees(topOT, topMiss, topAbs) {
-  const rows = (data, cells) => data.map((e,i) => `<tr><td>${i+1}</td>${cells(e)}</tr>`).join('');
+  const rows = (data, cells, noDataCols) => data?.length
+    ? data.map((e,i) => `<tr><td>${i+1}</td>${cells(e)}</tr>`).join('')
+    : `<tr><td colspan="${noDataCols}" class="text-center text-muted">${NO_DATA_MSG}</td></tr>`;
 
-  document.getElementById('topOTBody').innerHTML  = rows(topOT,  e=>`<td>${e.id_card}</td><td>${e.department}</td><td>${e.total_ot_hours}</td><td>${e.total_ot_pct}%</td>`);
-  document.getElementById('topMissBody').innerHTML= rows(topMiss,e=>`<td>${e.id_card}</td><td>${e.department}</td><td>${e.missing_hours}</td><td>${e.missing_pct}%</td>`);
-  document.getElementById('topAbsBody').innerHTML = rows(topAbs, e=>`<td>${e.id_card}</td><td>${e.department}</td><td>${e.abs_pct}%</td>`);
+  document.getElementById('topOTBody').innerHTML  = rows(topOT,  e=>`<td>${e.id_card}</td><td>${e.employee_name || e.id_card}</td><td>${e.department}</td><td>${e.total_ot_hours}</td><td>${e.total_ot_pct}%</td>`, 6);
+  document.getElementById('topMissBody').innerHTML= rows(topMiss,e=>`<td>${e.id_card}</td><td>${e.employee_name || e.id_card}</td><td>${e.department}</td><td>${e.missing_hours}</td><td>${e.missing_pct}%</td>`, 6);
+  document.getElementById('topAbsBody').innerHTML = rows(topAbs, e=>`<td>${e.id_card}</td><td>${e.employee_name || e.id_card}</td><td>${e.department}</td><td>${e.abs_pct}%</td>`, 5);
 }
 
 // ────────────────────────────────────────────────────────────────────────────
 // Leave analysis
 // ────────────────────────────────────────────────────────────────────────────
 function renderLeave(leaveData) {
+  if (!leaveData?.length) {
+    showNoDataChart('chartLeaveByType');
+    showNoDataChart('chartLeaveByDept');
+    setNoDataTableBody('leaveTableBody', 4);
+    return;
+  }
   // Aggregate by leave type
   const byType = {};
   leaveData.forEach(r => {
@@ -901,6 +980,13 @@ function renderLeave(leaveData) {
 // Manpower risk
 // ────────────────────────────────────────────────────────────────────────────
 function renderRisks(risks) {
+  if (!risks || Object.keys(risks).length === 0) {
+    ['riskIncAbs','riskIncOT','riskLowAtt','riskExcLeave','riskMissHrs','riskIntervention'].forEach(id => {
+      const el = document.getElementById(id);
+      if (el) el.innerHTML = `<li class="text-muted">${NO_DATA_MSG}</li>`;
+    });
+    return;
+  }
   const fillList = (id, items, textFn, emptyMsg) => {
     const ul = document.getElementById(id);
     ul.innerHTML = items.length
@@ -920,19 +1006,25 @@ function renderRisks(risks) {
 // ────────────────────────────────────────────────────────────────────────────
 function renderExceptions(exc) {
   const tbl = (id, rows, cellsFn) => {
-    document.getElementById(id).innerHTML = rows.slice(0,50).map((r,i)=>`<tr><td>${i+1}</td>${cellsFn(r)}</tr>`).join('');
+    document.getElementById(id).innerHTML = rows?.length
+      ? rows.slice(0,50).map((r,i)=>`<tr><td>${i+1}</td>${cellsFn(r)}</tr>`).join('')
+      : `<tr><td colspan="6" class="text-center text-muted">${NO_DATA_MSG}</td></tr>`;
   };
-  tbl('excAbsBody',     exc.excessive_absenteeism, r=>`<td>${r.id_card}</td><td>${r.department}</td><td class="text-danger">${r.abs_pct}%</td>`);
-  tbl('excOTBody',      exc.excessive_ot,          r=>`<td>${r.id_card}</td><td>${r.department}</td><td>${r.total_ot_pct}%</td><td>${r.total_ot_hours}</td>`);
-  tbl('excMissBody',    exc.excessive_missing,      r=>`<td>${r.id_card}</td><td>${r.department}</td><td>${r.missing_pct}%</td><td>${r.missing_hours}</td>`);
-  tbl('excNoLeaveBody', exc.no_leave,               r=>`<td>${r.id_card}</td><td>${r.department}</td>`);
-  tbl('excConsecBody',  exc.consecutive_absences,   r=>`<td>${r.id_card}</td><td>${r.department}</td><td class="text-danger">${r.max_consecutive} days</td>`);
+  tbl('excAbsBody',     exc.excessive_absenteeism, r=>`<td>${r.id_card}</td><td>${r.employee_name || r.id_card}</td><td>${r.department}</td><td class="text-danger">${r.abs_pct}%</td>`);
+  tbl('excOTBody',      exc.excessive_ot,          r=>`<td>${r.id_card}</td><td>${r.employee_name || r.id_card}</td><td>${r.department}</td><td>${r.total_ot_pct}%</td><td>${r.total_ot_hours}</td>`);
+  tbl('excMissBody',    exc.excessive_missing,      r=>`<td>${r.id_card}</td><td>${r.employee_name || r.id_card}</td><td>${r.department}</td><td>${r.missing_pct}%</td><td>${r.missing_hours}</td>`);
+  tbl('excNoLeaveBody', exc.no_leave,               r=>`<td>${r.id_card}</td><td>${r.employee_name || r.id_card}</td><td>${r.department}</td>`);
+  tbl('excConsecBody',  exc.consecutive_absences,   r=>`<td>${r.id_card}</td><td>${r.employee_name || r.id_card}</td><td>${r.department}</td><td class="text-danger">${r.max_consecutive} days</td>`);
 }
 
 // ────────────────────────────────────────────────────────────────────────────
 // Forecasting charts
 // ────────────────────────────────────────────────────────────────────────────
 function renderForecasts(forecasts) {
+  if (!forecasts || Object.keys(forecasts).length === 0) {
+    ['chartForecastAtt','chartForecastAbs','chartForecastOT','chartForecastMiss'].forEach(id => showNoDataChart(id));
+    return;
+  }
   const fields = [
     ['att_pct',      'chartForecastAtt',  'Attendance % – Forecast',  '#2ecc71'],
     ['abs_pct',      'chartForecastAbs',  'Absenteeism % – Forecast', '#e74c3c'],
@@ -957,6 +1049,10 @@ function renderForecasts(forecasts) {
 // Management insights
 // ────────────────────────────────────────────────────────────────────────────
 function renderInsights(data) {
+  if (data.no_data) {
+    document.getElementById('insightsList').innerHTML = `<div class="col-12 text-muted">${NO_DATA_MSG}</div>`;
+    return;
+  }
   const insights = [];
   const kpis = data.kpis;
 
@@ -1005,7 +1101,12 @@ async function loadData() {
     const params = getFilterParams();
     const resp = await fetch('/api/dashboard?' + params.toString());
     const data = await resp.json();
-    if (data.error) { alert(data.error); return; }
+    document.getElementById('lastRefreshDate').textContent = data.last_data_refresh_date || '—';
+    document.getElementById('totalRecordsLoaded').textContent = data.data_validation?.total_records_loaded ?? '—';
+    document.getElementById('recordsAfterFilters').textContent = data.data_validation?.records_after_filters ?? '—';
+    if (data.message && data.no_data) {
+      console.info(data.message);
+    }
 
     document.getElementById('bestDept').textContent  = data.best_dept || '—';
     document.getElementById('worstDept').textContent = data.worst_dept || '—';
@@ -1048,6 +1149,15 @@ document.getElementById('btnClearFilters')?.addEventListener('click', () => {
   loadData();
 });
 document.getElementById('btnRefresh')?.addEventListener('click', loadData);
+document.getElementById('btnExportAll')?.addEventListener('click', () => {
+  const params = getFilterParams();
+  window.open('/api/export?' + params.toString(), '_blank');
+});
+document.getElementById('btnExportDept')?.addEventListener('click', () => {
+  const params = getFilterParams();
+  params.set('selected_department_only', '1');
+  window.open('/api/export?' + params.toString(), '_blank');
+});
 
 // Initial load
 loadData();
