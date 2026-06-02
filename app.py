@@ -60,7 +60,12 @@ COLUMN_ALIASES = {
 }
 
 PRESENT_VALUES = {"P", "PRESENT", "A-P", "AP", "1"}
-ABSENT_VALUES  = {"A", "ABSENT", "AB", "ABS", "0", "NA", "UA"}
+ABSENT_VALUES  = {
+    "A", "ABSENT", "AB", "ABS", "0",
+    "NA", "UA",
+    "NOTIFIED ABSENCE", "UNNOTIFIED ABSENCE",
+    "N/A", "U/A",
+}
 LEAVE_VALUES   = {"L", "LEAVE", "AL", "SL", "EL", "ML", "PL", "CL"}
 APPROVED_LEAVE_TYPES = {
     "Annual Leave",
@@ -191,7 +196,11 @@ def generate_sample_data() -> pd.DataFrame:
     df["is_present"] = df["status_norm"].isin(PRESENT_VALUES)
     df["is_absent"]  = df["status_norm"].isin(ABSENT_VALUES)
     df["is_leave"]   = _approved_leave_mask(df)
-    df["leave_quantity_approved"] = np.where(df["is_leave"], df["leave_quantity"], 0.0)
+    df["leave_quantity_approved"] = np.where(
+        df["is_leave"],
+        np.where(df["leave_quantity"] > 0, df["leave_quantity"], 1.0),
+        0.0,
+    )
     df["total_ot"]   = df["ot1"] + df["ot2"] + df["ot3"]
     return df
 
@@ -284,25 +293,51 @@ def _normalize_excel(raw: pd.DataFrame) -> pd.DataFrame:
         df["is_absent"]  = False
         df["is_leave"]   = False
 
-    df["leave_quantity_approved"] = np.where(df["is_leave"], df["leave_quantity"], 0.0)
+    df["leave_quantity_approved"] = np.where(
+        df["is_leave"],
+        np.where(df["leave_quantity"] > 0, df["leave_quantity"], 1.0),
+        0.0,
+    )
     df["total_ot"] = df["ot1"] + df["ot2"] + df["ot3"]
     return df
 
 
 def _approved_leave_mask(df: pd.DataFrame) -> pd.Series:
-    if "leave_type" not in df.columns:
-        return pd.Series(False, index=df.index)
-    leave_type = df["leave_type"].fillna("").astype(str).str.strip()
-    status_norm = df["status"].astype(str).str.strip().str.upper() if "status" in df.columns else ""
-    return (
-        leave_type.isin(APPROVED_LEAVE_TYPES)
-        & (pd.to_numeric(df["leave_quantity"], errors="coerce").fillna(0) > 0)
-        & (
-            ~pd.Series(status_norm).isin(ABSENT_VALUES)
-            if isinstance(status_norm, pd.Series)
-            else True
+    """Return a boolean mask: True for rows that should be treated as approved leave.
+
+    A row is leave when:
+      • its status is a recognised leave code (LEAVE_VALUES), OR
+      • it has a non-empty leave_type with leave_quantity > 0 and the status is
+        NOT an absence code (ABSENT_VALUES).
+
+    This deliberately avoids requiring the leave_type to match a hardcoded list of
+    English names so that any real-world leave category works correctly.
+    """
+    status_norm = (
+        df["status_norm"]
+        if "status_norm" in df.columns
+        else (
+            df["status"].astype(str).str.strip().str.upper()
+            if "status" in df.columns
+            else pd.Series("", index=df.index)
         )
     )
+    leave_qty = (
+        pd.to_numeric(df["leave_quantity"], errors="coerce").fillna(0)
+        if "leave_quantity" in df.columns
+        else pd.Series(0.0, index=df.index)
+    )
+    leave_type = (
+        df["leave_type"].fillna("").astype(str).str.strip()
+        if "leave_type" in df.columns
+        else pd.Series("", index=df.index)
+    )
+
+    is_leave_status = status_norm.isin(LEAVE_VALUES)
+    has_leave_info  = (leave_type != "") & (leave_qty > 0)
+    not_absent      = ~status_norm.isin(ABSENT_VALUES)
+
+    return is_leave_status | (has_leave_info & not_absent)
 
 
 def _month_order(values: list) -> list[int]:
@@ -411,7 +446,9 @@ def _agg_metrics(group: pd.DataFrame) -> dict:
         "headcount":     group["id_card"].nunique(),
         "att_pct":       round(present / n * 100, 2),
         "abs_pct":       round(absent  / n * 100, 2),
+        "abs_count":     int(absent),
         "leave_pct":     round(leave   / n * 100, 2),
+        "leave_days":    round(float(leave), 1),
         "missing_pct":   round(miss    / expected_hrs * 100, 2),
         "ot1_pct":       round(ot1     / expected_hrs * 100, 2),
         "ot2_pct":       round(ot2     / expected_hrs * 100, 2),
@@ -444,6 +481,8 @@ def overall_kpis(df: pd.DataFrame) -> dict:
         val = m.get(k, 0)
         kpis[k] = {"value": val, "light": _traffic_light(k, val)}
     kpis["headcount"] = m.get("headcount", 0)
+    kpis["abs_count"] = m.get("abs_count", 0)
+    kpis["leave_days"] = m.get("leave_days", 0.0)
     return kpis
 
 

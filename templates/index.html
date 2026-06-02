@@ -124,6 +124,7 @@
           <div class="kpi-label">Absenteeism %</div>
           <div class="kpi-value" id="kv-abs">—</div>
           <div class="kpi-badge" id="kb-abs"></div>
+          <div class="kpi-sub text-muted" id="ks-abs" style="font-size:0.75rem;"></div>
         </div>
       </div>
     </div>
@@ -144,6 +145,7 @@
           <div class="kpi-label">Leave %</div>
           <div class="kpi-value" id="kv-leave">—</div>
           <div class="kpi-badge" id="kb-leave"></div>
+          <div class="kpi-sub text-muted" id="ks-leave" style="font-size:0.75rem;"></div>
         </div>
       </div>
     </div>
@@ -197,8 +199,8 @@
         <thead>
           <tr>
             <th>Month</th><th>Year</th><th>Headcount</th>
-            <th>Attendance %</th><th>Absenteeism %</th>
-            <th>Leave %</th><th>Missing Hrs %</th><th>OT %</th>
+            <th>Attendance %</th><th>Absenteeism %</th><th>Absent Records</th>
+            <th>Leave %</th><th>Leave Days</th><th>Missing Hrs %</th><th>OT %</th>
           </tr>
         </thead>
         <tbody id="monthlySummaryBody"></tbody>
@@ -674,6 +676,18 @@ function renderKPIs(kpis) {
       card.classList.add('kpi-'+light);
     }
   });
+
+  // Subtitle: absence record count
+  const absSubEl = document.getElementById('ks-abs');
+  if (absSubEl && kpis.abs_count !== undefined) {
+    absSubEl.textContent = kpis.abs_count.toLocaleString() + ' absent records';
+  }
+
+  // Subtitle: total leave days
+  const leaveSubEl = document.getElementById('ks-leave');
+  if (leaveSubEl && kpis.leave_days !== undefined) {
+    leaveSubEl.textContent = kpis.leave_days.toLocaleString() + ' leave days';
+  }
 }
 
 // ────────────────────────────────────────────────────────────────────────────
@@ -682,7 +696,7 @@ function renderKPIs(kpis) {
 function renderMonthlySummary(monthData) {
   const tbody = document.getElementById('monthlySummaryBody');
   if (!monthData?.length) {
-    setNoDataTableBody('monthlySummaryBody', 8);
+    setNoDataTableBody('monthlySummaryBody', 10);
     return;
   }
   tbody.innerHTML = monthData.map(r => `
@@ -691,7 +705,10 @@ function renderMonthlySummary(monthData) {
       <td>${r.headcount}</td>
       <td class="${lightClass(r.att_pct,'att')}">${r.att_pct}%</td>
       <td class="${lightClass(r.abs_pct,'abs')}">${r.abs_pct}%</td>
-      <td>${r.leave_pct}%</td><td>${r.missing_pct}%</td>
+      <td>${(r.abs_count ?? 0).toLocaleString()}</td>
+      <td>${r.leave_pct}%</td>
+      <td>${(r.leave_days ?? 0).toLocaleString()}</td>
+      <td>${r.missing_pct}%</td>
       <td class="${lightClass(r.total_ot_pct,'ot')}">${r.total_ot_pct}%</td>
     </tr>`).join('');
 }
