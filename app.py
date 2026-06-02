@@ -104,6 +104,7 @@ APPROVED_LEAVE_TYPES = {
     "SUSPEND LEAVE WITHOUT PAY",
 }
 APPROVED_LEAVE_TYPES_NORM = {t.strip().upper() for t in APPROVED_LEAVE_TYPES}
+NULL_LIKE_TEXT_VALUES = {"NAN", "NONE", "NULL", "NAT"}
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Sample data generation (used when the Excel file is not found)
@@ -277,20 +278,29 @@ def load_data() -> pd.DataFrame:
 def _normalized_leave_type(df: pd.DataFrame) -> pd.Series:
     if "leave_type" not in df.columns:
         return pd.Series("", index=df.index, dtype="object")
-    return df["leave_type"].fillna("").astype(str).str.strip().str.upper()
+    return df["leave_type"].apply(_normalize_text_value)
+
+
+def _normalize_text_value(value) -> str:
+    if value is None or pd.isna(value):
+        return ""
+    normalized = str(value).strip().upper()
+    return "" if normalized in NULL_LIKE_TEXT_VALUES else normalized
 
 
 def classify_attendance(row) -> str:
     """Return attendance category as PRESENT, LEAVE, or ABSENT."""
-    leave_type = str(row.get("leave_type", "") or "").strip().upper()
-    status_norm = str(row.get("status_norm", row.get("status", "")) or "").strip().upper()
+    leave_type = _normalize_text_value(row.get("leave_type", ""))
+    status_norm = _normalize_text_value(row.get("status_norm", row.get("status", "")))
 
-    if leave_type in ABSENT_LEAVE_TYPES or status_norm in ABSENT_VALUES:
+    if leave_type in ABSENT_LEAVE_TYPES:
         return "ABSENT"
     if leave_type in PRESENT_LEAVE_TYPES:
         return "PRESENT"
     if leave_type:
         return "LEAVE"
+    if status_norm in ABSENT_VALUES:
+        return "ABSENT"
     if status_norm in LEAVE_VALUES:
         return "LEAVE"
     return "PRESENT"
@@ -299,11 +309,14 @@ def classify_attendance(row) -> str:
 def _apply_attendance_classification(df: pd.DataFrame) -> pd.DataFrame:
     if "leave_type" not in df.columns:
         df["leave_type"] = ""
+    if "leave_quantity" not in df.columns:
+        df["leave_quantity"] = 0.0
     if "status_norm" not in df.columns:
         if "status" in df.columns:
             df["status_norm"] = df["status"].astype(str).str.strip().str.upper()
         else:
             df["status_norm"] = ""
+    df["leave_quantity"] = pd.to_numeric(df["leave_quantity"], errors="coerce").fillna(0.0)
 
     df["attendance_category"] = df.apply(classify_attendance, axis=1)
     df["is_present"] = df["attendance_category"] == "PRESENT"
@@ -333,6 +346,8 @@ def _print_attendance_summary(df: pd.DataFrame) -> None:
 
 
 def _absent_mask(df: pd.DataFrame, status_norm: pd.Series | None = None) -> pd.Series:
+    if "attendance_category" in df.columns:
+        return df["attendance_category"] == "ABSENT"
     if status_norm is None:
         status_norm = (
             df["status_norm"]
@@ -422,6 +437,9 @@ def _approved_leave_mask(df: pd.DataFrame) -> pd.Series:
     NA and UA in status/leave_type are absence markers and must not be treated
     as leave.
     """
+    if "attendance_category" in df.columns:
+        return df["attendance_category"] == "LEAVE"
+
     status_norm = (
         df["status_norm"]
         if "status_norm" in df.columns
@@ -432,11 +450,10 @@ def _approved_leave_mask(df: pd.DataFrame) -> pd.Series:
         )
     )
     leave_type = (
-        df["leave_type"].fillna("").astype(str).str.strip()
+        df["leave_type"].apply(_normalize_text_value)
         if "leave_type" in df.columns
         else pd.Series("", index=df.index, dtype="object")
     )
-    leave_type_upper = leave_type.str.upper()
 
     leave_qty = (
         pd.to_numeric(df["leave_quantity"], errors="coerce").fillna(0)
@@ -444,9 +461,9 @@ def _approved_leave_mask(df: pd.DataFrame) -> pd.Series:
         else pd.Series(0.0, index=df.index, dtype="float64")
     )
 
-    is_absence_marker    = status_norm.isin(ABSENT_VALUES) | leave_type_upper.isin(ABSENT_VALUES)
+    is_absence_marker    = status_norm.isin(ABSENT_VALUES) | leave_type.isin(ABSENT_VALUES)
     is_leave_status      = status_norm.isin(LEAVE_VALUES)
-    has_approved_leave_type = leave_type_upper.isin(APPROVED_LEAVE_TYPES_NORM)
+    has_approved_leave_type = leave_type.isin(APPROVED_LEAVE_TYPES_NORM)
     has_leave_quantity   = leave_qty > 0
 
     return (is_leave_status | has_approved_leave_type | has_leave_quantity) & ~is_absence_marker
