@@ -328,12 +328,11 @@ def _approved_leave_mask(df: pd.DataFrame) -> pd.Series:
 
     A row is leave when:
       • its status is a recognised leave code (LEAVE_VALUES), OR
-      • it has a non-empty leave_type that is NOT an absence marker (NA, UA, etc.)
-        and the row is not otherwise flagged as absent.
+      • it has a non-empty leave_type that is NOT an absence marker (NA, UA, etc.), OR
+      • it has a positive leave_quantity value.
 
     NA and UA in the leave_type column are absence markers, not leave, so they
-    are explicitly excluded from this mask.  leave_quantity is not required to be
-    positive here; leave_quantity_approved handles the default of 1 day.
+    are explicitly excluded from leave_type-based detection.
     """
     status_norm = (
         df["status_norm"]
