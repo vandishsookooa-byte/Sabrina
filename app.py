@@ -83,6 +83,7 @@ APPROVED_LEAVE_TYPES = {
     "Maternity Leave",
     "Unpaid Leave",
 }
+APPROVED_LEAVE_TYPES_NORM = {t.strip().upper() for t in APPROVED_LEAVE_TYPES}
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Sample data generation (used when the Excel file is not found)
@@ -355,11 +356,11 @@ def _approved_leave_mask(df: pd.DataFrame) -> pd.Series:
 
     A row is leave when:
       • its status is a recognised leave code (LEAVE_VALUES), OR
-      • it has a non-empty leave_type that is NOT an absence marker (NA, UA, etc.), OR
+      • it has an approved leave_type value, OR
       • it has a positive leave_quantity value.
 
-    NA and UA in the leave_type column are absence markers, not leave, so they
-    are explicitly excluded from leave_type-based detection.
+    NA and UA in status/leave_type are absence markers and must not be treated
+    as leave.
     """
     status_norm = (
         df["status_norm"]
@@ -383,11 +384,12 @@ def _approved_leave_mask(df: pd.DataFrame) -> pd.Series:
         else pd.Series(0.0, index=df.index, dtype="float64")
     )
 
+    is_absence_marker    = status_norm.isin(ABSENT_VALUES) | leave_type_upper.isin(ABSENT_VALUES)
     is_leave_status      = status_norm.isin(LEAVE_VALUES)
-    has_valid_leave_type = (leave_type != "") & ~leave_type_upper.isin(ABSENT_VALUES)
+    has_approved_leave_type = leave_type_upper.isin(APPROVED_LEAVE_TYPES_NORM)
     has_leave_quantity   = leave_qty > 0
 
-    return is_leave_status | has_valid_leave_type | has_leave_quantity
+    return (is_leave_status | has_approved_leave_type | has_leave_quantity) & ~is_absence_marker
 
 
 def _month_order(values: list) -> list[int]:
