@@ -50,9 +50,18 @@ COLUMN_ALIASES = {
     "employee_name":  ["Employee Name", "Name", "Emp Name", "Full Name", "Employee"],
     "department":     ["Department", "Dept", "Department Name", "DEPARTMENT"],
     "date":           ["Date", "Attendance Date", "Att Date", "Work Date", "ATTENDANCE_DATE"],
-    "status":         ["Status", "Attendance Status", "Att Status", "ATTENDANCE"],
-    "leave_type":     ["Leave Type", "LeaveType", "Leave Category", "LEAVE_TYPE"],
-    "leave_quantity": ["Leave Quantity", "Leave Days", "LeaveQty", "Leave Qty", "No. of Days", "LEAVE_QTY"],
+    "status":         ["Status", "Attendance Status", "Att Status", "ATTENDANCE",
+                       "Attendance Code", "Att Code", "Status Code", "ATT STATUS",
+                       "ATT", "Att", "ATTEND", "Attend"],
+    "leave_type":     ["Leave Type", "LeaveType", "Leave Category", "LEAVE_TYPE",
+                       "Leave Code", "Leave Status", "Leave Reason", "Absence Type",
+                       "Absence Code", "Absence Reason", "Absence Status", "Type of Leave",
+                       "LEAVECODE", "LEAVESTATUS", "ABSENCETYPE", "LEAVE STATUS",
+                       "ABSENCE TYPE", "LEAVE CODE"],
+    "leave_quantity": ["Leave Quantity", "Leave Days", "LeaveQty", "Leave Qty",
+                       "No. of Days", "No of Days", "LEAVE_QTY", "LeaveDays",
+                       "Days Taken", "Approved Days", "Leave No", "Leave Nos",
+                       "LEAVEDAYS", "LEAVEQUANTITY"],
     "missing_hours":  ["Missing Hours", "MissingHours", "Late Hours", "Miss Hours", "MISSING_HOURS"],
     "ot1":            ["OT1", "OT 1", "Overtime 1", "OT-1", "Over Time 1", "OT_1"],
     "ot2":            ["OT2", "OT 2", "Overtime 2", "OT-2", "Over Time 2", "OT_2"],
@@ -280,6 +289,16 @@ def _normalize_excel(raw: pd.DataFrame) -> pd.DataFrame:
         if found and found != internal:
             rename[found] = internal
     df = raw.rename(columns=rename)
+
+    # Log which key columns were detected / missing to help with diagnostics
+    key_cols = ("status", "leave_type", "leave_quantity", "id_card", "department", "date")
+    detected = [c for c in key_cols if c in df.columns]
+    missing  = [c for c in key_cols if c not in df.columns]
+    if missing:
+        print(f"[WARN] Excel columns NOT detected (leave/attendance may be wrong): {missing}")
+        print(f"       Detected columns: {list(raw.columns)[:20]}")
+    else:
+        print(f"[INFO] Excel columns detected OK: {detected}")
 
     # Ensure required columns exist
     for col in ("leave_quantity", "missing_hours", "ot1", "ot2", "ot3"):
