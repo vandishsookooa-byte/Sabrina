@@ -212,11 +212,19 @@ _cached_df: pd.DataFrame | None = None
 
 
 def _resolve_column(df_cols: list, aliases: list) -> str | None:
-    """Return the first alias that matches a column in df_cols (case-insensitive)."""
-    lower_map = {c.lower(): c for c in df_cols}
+    """Return the first alias that matches a column in df_cols."""
+    def _norm(name) -> str:
+        return "".join(ch for ch in str(name).strip().lower() if ch.isalnum())
+
+    lower_map = {str(c).lower(): c for c in df_cols}
+    normalized_map = {_norm(c): c for c in df_cols}
     for a in aliases:
-        if a.lower() in lower_map:
-            return lower_map[a.lower()]
+        a_lower = str(a).lower()
+        if a_lower in lower_map:
+            return lower_map[a_lower]
+        a_norm = _norm(a)
+        if a_norm in normalized_map:
+            return normalized_map[a_norm]
     return None
 
 
