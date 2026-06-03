@@ -22,14 +22,14 @@
           <tr>
             <td>Attendance %</td>
             <td>(Present Records / Total Records) × 100</td>
-            <td><code>status</code>, <code>is_present</code></td>
-            <td>Records with status in {P, PRESENT, A-P, AP, 1} are treated as Present.</td>
+            <td><code>hours_worked</code>, <code>leave_quantity</code>, <code>is_present</code></td>
+            <td>Rows with <code>hours_worked ≥ 2</code> are treated as Present, except rows with full-day leave (<code>leave_quantity ≥ 1</code>).</td>
           </tr>
           <tr>
             <td>Absenteeism %</td>
             <td>(Absent Records / Total Records) × 100</td>
-            <td><code>status</code>, <code>is_absent</code></td>
-            <td>Status values NA and UA are classified as Absenteeism and are not treated as leave.</td>
+            <td><code>status</code>, <code>leave_type</code>, <code>is_absent</code></td>
+            <td>Only NA and UA absence markers are classified as Absenteeism.</td>
           </tr>
           <tr>
             <td>Leave %</td>

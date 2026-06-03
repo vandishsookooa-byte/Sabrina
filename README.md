@@ -72,6 +72,7 @@ The app auto-detects common column name variants. The table below shows the inte
 | `department` | Department, Dept, Department Name |
 | `date` | Date, Attendance Date, Att Date |
 | `status` | Status, Attendance Status (P/A/L) |
+| `hours_worked` | Hours Worked, Worked Hours, Working Hours |
 | `leave_type` | Leave Type, LeaveType, Leave Category |
 | `leave_quantity` | Leave Quantity, Leave Days, LeaveQty |
 | `missing_hours` | Missing Hours, MissingHours, Late Hours |
