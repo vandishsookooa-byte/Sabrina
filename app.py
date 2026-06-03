@@ -65,7 +65,7 @@ COLUMN_ALIASES = {
                        "Days Taken", "Approved Days", "Leave No", "Leave Nos",
                        "LEAVEDAYS", "LEAVEQUANTITY"],
     "missing_hours":  ["Missing Hours", "MissingHours", "Late Hours", "Miss Hours", "MISSING_HOURS"],
-    "hours_worked":   ["Hours Worked", "Worked Hours", "Work Hours", "Working Hours", "Hours", "Hrs Worked", "HoursWorked"],
+    "hours_worked":   ["Hours Worked", "Worked Hours", "Hours", "Working Hours", "HRS WORKED", "HOURS WORKED"],
     "ot1":            ["OT1", "OT 1", "Overtime 1", "OT-1", "Over Time 1", "OT_1"],
     "ot2":            ["OT2", "OT 2", "Overtime 2", "OT-2", "Over Time 2", "OT_2"],
     "ot3":            ["OT3", "OT 3", "Overtime 3", "OT-3", "Over Time 3", "OT_3"],
@@ -97,14 +97,14 @@ APPROVED_LEAVE_TYPES = {
     "SL",
     "CL",
     "CL(N)",
-    "LEAVE WITHOUT PAY",
+    "ANNUAL LEAVE",
+    "SICK LEAVE",
+    "MATERNITY LEAVE",
+    "PATERNITY LEAVE",
     "INJURY LEAVE",
-    "PATERNITY",
     "STUDY LEAVE",
-    "SPECIAL LEAVE (DEATH OF NEXT TO KIN)",
-    "SPECIAL LEAVE (OWN WEDDING)",
-    "SUSPENDED LEAVE WITH PAY",
-    "SUSPEND LEAVE WITHOUT PAY",
+    "SPECIAL LEAVE",
+    "LEAVE WITHOUT PAY",
 }
 APPROVED_LEAVE_TYPES_NORM = {t.strip().upper() for t in APPROVED_LEAVE_TYPES}
 NULL_LIKE_TEXT_VALUES = {"NAN", "NONE", "NULL", "NAT"}
@@ -206,6 +206,9 @@ def generate_sample_data() -> pd.DataFrame:
                     missing = 0.0
                     if status == "P" and random.random() < cfg["miss"]:
                         missing = round(random.uniform(0.5, 2.0), 1)
+                    hours_worked = 0.0
+                    if status == "P":
+                        hours_worked = max(PRESENT_THRESHOLD_HOURS, round(STANDARD_WORKDAY_HOURS - missing, 1))
 
                     rows.append({
                         "id_card":        emp,
@@ -213,6 +216,7 @@ def generate_sample_data() -> pd.DataFrame:
                         "department":     dept,
                         "date":           pd.Timestamp(d),
                         "status":         status,
+                        "hours_worked":   hours_worked,
                         "leave_type":     leave_type,
                         "leave_quantity": leave_qty,
                         "missing_hours":  missing,
@@ -294,39 +298,18 @@ def _normalize_text_value(value) -> str:
 def classify_attendance(row) -> str:
     """Return attendance category as PRESENT, LEAVE, or ABSENT."""
     leave_type = _normalize_text_value(row.get("leave_type", ""))
-    status_norm = _normalize_text_value(row.get("status_norm", row.get("status", "")))
     leave_qty = pd.to_numeric(row.get("leave_quantity", 0.0), errors="coerce")
     leave_qty = float(leave_qty) if pd.notna(leave_qty) else 0.0
-    hours_worked = pd.to_numeric(row.get("hours_worked", np.nan), errors="coerce")
+    hours_worked = pd.to_numeric(row.get("hours_worked", 0), errors="coerce")
+    hours_worked = float(hours_worked) if pd.notna(hours_worked) else 0.0
 
     if leave_type in ABSENT_LEAVE_TYPES:
         return "ABSENT"
-    if status_norm in ABSENT_VALUES:
-        return "ABSENT"
-    if leave_type in PRESENT_LEAVE_TYPES:
+    if leave_qty >= 1 or (leave_type in APPROVED_LEAVE_TYPES_NORM and hours_worked < PRESENT_THRESHOLD_HOURS):
+        return "LEAVE"
+    if hours_worked >= PRESENT_THRESHOLD_HOURS:
         return "PRESENT"
-
-    has_leave_signal = bool(
-        (leave_type and leave_type not in ABSENT_LEAVE_TYPES)
-        or (status_norm in LEAVE_VALUES)
-        or (leave_qty > 0)
-    )
-    is_full_day_leave = has_leave_signal and leave_qty >= 1
-
-    if pd.notna(hours_worked):
-        if hours_worked >= PRESENT_THRESHOLD_HOURS and not is_full_day_leave:
-            return "PRESENT"
-        if has_leave_signal:
-            return "LEAVE"
-        return "OTHER"
-
-    if status_norm in LEGACY_ABSENT_VALUES:
-        return "ABSENT"
-    if leave_type:
-        return "LEAVE"
-    if status_norm in LEAVE_VALUES:
-        return "LEAVE"
-    return "PRESENT"
+    return "ABSENT"
 
 
 def _apply_attendance_classification(df: pd.DataFrame) -> pd.DataFrame:
@@ -354,21 +337,26 @@ def _apply_attendance_classification(df: pd.DataFrame) -> pd.DataFrame:
 
 
 def _print_attendance_summary(df: pd.DataFrame) -> None:
-    present = int(df["is_present"].sum()) if "is_present" in df.columns else 0
-    leave = int(df["is_leave"].sum()) if "is_leave" in df.columns else 0
-    absent = int(df["is_absent"].sum()) if "is_absent" in df.columns else 0
-    other = int((~(df["is_present"] | df["is_leave"] | df["is_absent"])).sum()) if {"is_present", "is_leave", "is_absent"}.issubset(df.columns) else 0
     total = int(len(df))
+    present = int(df["is_present"].sum()) if "is_present" in df.columns else 0
+    absent = int(df["is_absent"].sum()) if "is_absent" in df.columns else 0
+    leave = int(df["is_leave"].sum()) if "is_leave" in df.columns else 0
 
-    print("Present :", present)
-    print("Leave   :", leave)
-    print("Absent  :", absent)
-    if other:
-        print("Other   :", other)
-    if "attendance_category" in df.columns:
-        print(df["attendance_category"].value_counts())
-    print("Total   :", total)
-    print("Check   :", present + leave + absent + other == total)
+    print("=" * 60)
+    print("ATTENDANCE VALIDATION")
+    print("=" * 60)
+    print("Total Records:", total)
+    print("Present Records:", present)
+    print("Absent Records:", absent)
+    print("Leave Records:", leave)
+    if total > 0:
+        print("Attendance %:", round(present / total * 100, 2))
+        print("Absenteeism %:", round(absent / total * 100, 2))
+        print("Leave %:", round(leave / total * 100, 2))
+    else:
+        print("Attendance %:", 0.0)
+        print("Absenteeism %:", 0.0)
+        print("Leave %:", 0.0)
 
 
 def _absent_mask(df: pd.DataFrame, status_norm: pd.Series | None = None) -> pd.Series:
@@ -436,8 +424,12 @@ def _normalize_excel(raw: pd.DataFrame) -> pd.DataFrame:
     # Normalize numeric columns
     for col in ("leave_quantity", "missing_hours", "ot1", "ot2", "ot3"):
         df[col] = pd.to_numeric(df[col], errors="coerce").fillna(0)
-    if "hours_worked" in df.columns:
-        df["hours_worked"] = pd.to_numeric(df["hours_worked"], errors="coerce")
+    if "hours_worked" not in df.columns:
+        df["hours_worked"] = 0
+    df["hours_worked"] = (
+        pd.to_numeric(df["hours_worked"], errors="coerce")
+        .fillna(0)
+    )
     df["employee_name"] = df["employee_name"].fillna("").astype(str).str.strip()
     if "id_card" in df.columns:
         df.loc[df["employee_name"] == "", "employee_name"] = df["id_card"].astype(str)
