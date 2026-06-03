@@ -33,37 +33,37 @@
           </tr>
           <tr>
             <td>Leave %</td>
-            <td>(Approved Leave Quantity / (Total Records × 8)) × 100</td>
+            <td>(Approved Leave Quantity / Total Records) × 100</td>
             <td><code>leave_type</code>, <code>leave_quantity</code>, <code>leave_quantity_approved</code>, <code>is_leave</code></td>
             <td>Only company-approved leave types are included in leave calculations.</td>
           </tr>
           <tr>
             <td>OT %</td>
-            <td>((OT1 + OT2 + OT3) / (Total Records × 8)) × 100</td>
+            <td>((OT1 + OT2 + OT3) / (Total Records × 9)) × 100</td>
             <td><code>ot1</code>, <code>ot2</code>, <code>ot3</code></td>
             <td>Total OT % combines all overtime buckets and recalculates after every filter selection.</td>
           </tr>
           <tr>
             <td>OT1 %</td>
-            <td>(OT1 / (Total Records × 8)) × 100</td>
+            <td>(OT1 / (Total Records × 9)) × 100</td>
             <td><code>ot1</code></td>
             <td>Calculated per group (company/department/employee) after active filters are applied.</td>
           </tr>
           <tr>
             <td>OT2 %</td>
-            <td>(OT2 / (Total Records × 8)) × 100</td>
+            <td>(OT2 / (Total Records × 9)) × 100</td>
             <td><code>ot2</code></td>
             <td>Calculated per group (company/department/employee) after active filters are applied.</td>
           </tr>
           <tr>
             <td>OT3 %</td>
-            <td>(OT3 / (Total Records × 8)) × 100</td>
+            <td>(OT3 / (Total Records × 9)) × 100</td>
             <td><code>ot3</code></td>
             <td>Calculated per group (company/department/employee) after active filters are applied.</td>
           </tr>
           <tr>
             <td>Missing Hours %</td>
-            <td>(Missing Hours / (Total Records × 8)) × 100</td>
+            <td>(Missing Hours / (Total Records × 9)) × 100</td>
             <td><code>missing_hours</code></td>
             <td>Missing hours are aggregated from attendance records and recalculated for all filters.</td>
           </tr>

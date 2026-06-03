@@ -27,6 +27,7 @@ EXCEL_FILE_PATH = os.getenv(
 )
 PORT = int(os.getenv("PORT", 5000))
 DEBUG = os.getenv("FLASK_DEBUG", "0") == "1"
+STANDARD_WORKDAY_HOURS = 9
 
 # KPI thresholds (for traffic-light indicators)
 THRESHOLDS = {
@@ -557,7 +558,7 @@ def _agg_metrics(group: pd.DataFrame) -> dict:
     n = len(group)
     if n == 0:
         return {}
-    expected_hrs = n * 8
+    expected_hrs = n * STANDARD_WORKDAY_HOURS
 
     present = group["is_present"].sum() if "is_present" in group else n
     absent  = group["is_absent"].sum()  if "is_absent"  in group else 0
@@ -1109,7 +1110,7 @@ def api_drilldown():
     # OT breakdown by type and department
     ot_breakdown = []
     for dept, g in df.groupby("department"):
-        expected = len(g) * 8
+        expected = len(g) * STANDARD_WORKDAY_HOURS
         ot_breakdown.append({
             "department": dept,
             "ot1_pct":   round(g["ot1"].sum() / expected * 100, 2) if expected else 0,
