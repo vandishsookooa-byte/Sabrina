@@ -1,0 +1,107 @@
+{% extends "base.html" %}
+{% block title %}Calculation Methodology – Sabrina{% endblock %}
+
+{% block content %}
+<div class="container-fluid px-4 py-3">
+  <div class="section-card mb-4">
+    <div class="section-header"><i class="bi bi-journal-text me-2 text-accent"></i>Calculation Methodology Reference</div>
+    <p class="text-muted mb-3">
+      This page documents the formulas, data fields, and business rules used throughout the dashboard.
+    </p>
+    <div class="table-responsive">
+      <table class="data-table">
+        <thead>
+          <tr>
+            <th>KPI</th>
+            <th>Formula</th>
+            <th>Data Fields Used</th>
+            <th>Business Rules</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>Attendance %</td>
+            <td>(Present Records / Total Records) × 100</td>
+            <td><code>hours_worked</code>, <code>leave_quantity</code>, <code>is_present</code></td>
+            <td>Rows with <code>hours_worked ≥ 2</code> are treated as Present, except rows with full-day leave (<code>leave_quantity ≥ 1</code>).</td>
+          </tr>
+          <tr>
+            <td>Absenteeism %</td>
+            <td>(Absent Records / Total Records) × 100</td>
+            <td><code>status</code>, <code>leave_type</code>, <code>is_absent</code></td>
+            <td>Only NA and UA absence markers are classified as Absenteeism.</td>
+          </tr>
+          <tr>
+            <td>Leave %</td>
+            <td>(Approved Leave Quantity / Total Records) × 100</td>
+            <td><code>leave_type</code>, <code>leave_quantity</code>, <code>leave_quantity_approved</code>, <code>is_leave</code></td>
+            <td>Only company-approved leave types are included in leave calculations.</td>
+          </tr>
+          <tr>
+            <td>OT %</td>
+            <td>((OT1 + OT2 + OT3) / (Total Records × 9)) × 100</td>
+            <td><code>ot1</code>, <code>ot2</code>, <code>ot3</code></td>
+            <td>Total OT % combines all overtime buckets and recalculates after every filter selection.</td>
+          </tr>
+          <tr>
+            <td>OT1 %</td>
+            <td>(OT1 / (Total Records × 9)) × 100</td>
+            <td><code>ot1</code></td>
+            <td>Calculated per group (company/department/employee) after active filters are applied.</td>
+          </tr>
+          <tr>
+            <td>OT2 %</td>
+            <td>(OT2 / (Total Records × 9)) × 100</td>
+            <td><code>ot2</code></td>
+            <td>Calculated per group (company/department/employee) after active filters are applied.</td>
+          </tr>
+          <tr>
+            <td>OT3 %</td>
+            <td>(OT3 / (Total Records × 9)) × 100</td>
+            <td><code>ot3</code></td>
+            <td>Calculated per group (company/department/employee) after active filters are applied.</td>
+          </tr>
+          <tr>
+            <td>Missing Hours %</td>
+            <td>(Missing Hours / (Total Records × 9)) × 100</td>
+            <td><code>missing_hours</code></td>
+            <td>Missing hours are aggregated from attendance records and recalculated for all filters.</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <div class="row g-3">
+    <div class="col-lg-6">
+      <div class="section-card h-100">
+        <div class="section-header"><i class="bi bi-check2-circle me-2 text-success"></i>Approved Leave Types</div>
+        <ul class="mb-0">
+          {% for t in approved_leave_types %}
+          <li>{{ t }}</li>
+          {% endfor %}
+        </ul>
+      </div>
+    </div>
+    <div class="col-lg-6">
+      <div class="section-card h-100">
+        <div class="section-header"><i class="bi bi-traffic-light me-2 text-accent"></i>Traffic-Light Thresholds</div>
+        <div class="table-responsive">
+          <table class="data-table">
+            <thead>
+              <tr><th>Metric</th><th>Green</th><th>Yellow</th><th>Red</th></tr>
+            </thead>
+            <tbody>
+              <tr><td>Attendance %</td><td>&ge; {{ thresholds.att_pct.green }}</td><td>&ge; {{ thresholds.att_pct.yellow }} and &lt; {{ thresholds.att_pct.green }}</td><td>&lt; {{ thresholds.att_pct.yellow }}</td></tr>
+              <tr><td>Absenteeism %</td><td>&le; {{ thresholds.abs_pct.yellow }}</td><td>&gt; {{ thresholds.abs_pct.yellow }} and &le; {{ thresholds.abs_pct.red }}</td><td>&gt; {{ thresholds.abs_pct.red }}</td></tr>
+              <tr><td>Leave %</td><td>&le; {{ thresholds.leave_pct.yellow }}</td><td>&gt; {{ thresholds.leave_pct.yellow }} and &le; {{ thresholds.leave_pct.red }}</td><td>&gt; {{ thresholds.leave_pct.red }}</td></tr>
+              <tr><td>Missing Hours %</td><td>&le; {{ thresholds.missing_pct.yellow }}</td><td>&gt; {{ thresholds.missing_pct.yellow }} and &le; {{ thresholds.missing_pct.red }}</td><td>&gt; {{ thresholds.missing_pct.red }}</td></tr>
+              <tr><td>OT %</td><td>&le; {{ thresholds.ot_pct.yellow }}</td><td>&gt; {{ thresholds.ot_pct.yellow }} and &le; {{ thresholds.ot_pct.red }}</td><td>&gt; {{ thresholds.ot_pct.red }}</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}
